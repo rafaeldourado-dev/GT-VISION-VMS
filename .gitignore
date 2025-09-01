@@ -1,0 +1,60 @@
+# ############################################################################
+# Arquivo .gitignore para o projeto GT-Vision VMS
+# ############################################################################
+
+# === Arquivos de Ambiente ===
+# Nunca comente esta linha. Contém senhas e chaves de API.
+.env
+.env.*
+!.env.example
+
+# === Frontend (Node.js / Vite / React) ===
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.pnpm-debug.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/coverage/
+
+# === Backend & AI-Processor (Python / FastAPI) ===
+backend/__pycache__/
+backend/*.pyc
+backend/.venv/
+backend/venv/
+backend/env/
+backend/instance/
+
+ai-processor/__pycache__/
+ai-processor/*.pyc
+ai-processor/.venv/
+ai-processor/venv/
+ai-processor/env/
+
+# === Arquivos de Sistema Operacional e Editores ===
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# === Logs e Arquivos de Cache ===
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Docker ===
+# Não ignorar Dockerfile ou docker-compose.yml, apenas arquivos gerados
+docker-compose.override.yml

@@ -1,0 +1,9 @@
+opencv-python
+numpy
+ultralytics
+torch
+requests
+python-dotenv
+loguru
+easyocr
+# Adicione onnxruntime se a sua versão do easyocr o exigir
