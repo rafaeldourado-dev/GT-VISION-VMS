@@ -1,40 +1,41 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from .database import SessionLocal
-from . import crud, schemas, models
+from contextlib import asynccontextmanager
+from . import models, crud, schemas
+from .database import engine, SessionLocal
 from .routers import auth, cameras, sightings, crm
 
-# A linha Base.metadata.create_all(bind=engine) FOI REMOVIDA.
+# Cria as tabelas no banco de dados (se não existirem)
+models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="GT-Vision SaaS API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-def on_startup():
+# Função de inicialização para criar o usuário admin
+def startup_event():
     db = SessionLocal()
     try:
+        # Verifica se o usuário administrador já existe
         admin_user = crud.get_user_by_email(db, email="admin@gtvision.com")
         if not admin_user:
-            admin_in = schemas.UserCreate(email="admin@gtvision.com", password="admin_password_super_secret")
-            user = crud.create_user(db, user=admin_in)
-            user.role = models.UserRole.ADMIN
-            crud.regenerate_user_api_key(db, user=user)
-            db.commit()
+            # Se não existir, cria um
+            user_in = schemas.UserCreate(email="admin@gtvision.com", password="adminpassword")
+            crud.create_user(db=db, user=user_in)
+            print("Usuário administrador criado com sucesso.")
     finally:
         db.close()
 
-app.include_router(auth.router)
-app.include_router(cameras.router)
-app.include_router(sightings.router)
-app.include_router(crm.router)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Executa a lógica de inicialização
+    startup_event()
+    yield
+    # Lógica de encerramento (se houver) pode vir aqui
+
+app = FastAPI(lifespan=lifespan)
+
+# Inclui os roteadores da API
+app.include_router(auth.router, prefix="/api")
+app.include_router(cameras.router, prefix="/api")
+app.include_router(sightings.router, prefix="/api")
+app.include_router(crm.router, prefix="/api")
 
 @app.get("/")
 def read_root():
-    return {"status": "API is running"}
+    return {"message": "Bem-vindo à API GT-Vision"}

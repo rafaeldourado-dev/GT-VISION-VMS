@@ -13,13 +13,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = security.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/register", response_model=schemas.UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(dependencies.get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
-@router.get("/users/me", response_model=schemas.UserSchema)
+@router.get("/users/me", response_model=schemas.User)
 def read_current_user(current_user: models.User = Depends(dependencies.get_current_user)):
     return current_user
