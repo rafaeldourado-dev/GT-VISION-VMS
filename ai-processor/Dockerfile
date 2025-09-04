@@ -1,25 +1,31 @@
-# Usa uma imagem base do Pytorch que funciona bem em CPU
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-WORKDIR /code
-
-# Instala dependências do sistema como OpenCV
-RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && \
+# 1. Instala as dependências do sistema para OpenCV e vídeo
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libgl1 \
+    libglib2.0-0 && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-# Instala as dependências Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# 2. Define o diretório de trabalho
+WORKDIR /app
 
-# Copia todo o código do ai-processor para dentro do contentor
+# 3. Copia os ficheiros de requisitos e a biblioteca local primeiro
+COPY requirements.txt .
+COPY fast-plate-ocr-master ./fast-plate-ocr-master
+
+# 4. Instala as dependências Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 5. Copia o resto do código da aplicação
 COPY . .
 
-# --- INÍCIO DA MODIFICAÇÃO ---
-# Cria a pasta para os modelos de IA e move o modelo genérico para lá
-RUN mkdir -p models_ai
-RUN cp yolov8n.pt models_ai/best.pt
-# --- FIM DA MODIFICAÇÃO ---
+# 6. Cria a pasta para guardar as imagens capturadas
+RUN mkdir -p /app/captures
 
-# Comando para iniciar a aplicação 
+# 7. Comando para executar a aplicação
 CMD ["python", "main.py"]

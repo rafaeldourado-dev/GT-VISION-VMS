@@ -1,62 +1,70 @@
 import cv2
-import easyocr
-import re
-import logging
+import time
+import logging # Usar a biblioteca padrão de logging
 from ultralytics import YOLO
-import torch
+# CORREÇÃO 1: O nome da classe foi atualizado para LicensePlateRecognizer
+from fast_plate_ocr import LicensePlateRecognizer 
+from api_client import APIClient
 
-logger = logging.getLogger(__name__)
+# Configurar o logger padrão
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class LPRProcessor:
-    def __init__(self):
-        device = 'cpu' # Força o uso de CPU
-        logger.info(f"A carregar modelos de IA no dispositivo: {device.upper()}")
-        
-        try:
-            # Coloque o seu melhor modelo de deteção de matrículas aqui
-            self.plate_detector = YOLO('models_ai/best.pt').to(device)
-            logger.info("Modelo de deteção de matrículas carregado com sucesso.")
-        except Exception as e:
-            logger.error(f"Falha ao carregar o modelo de matrículas: {e}. A usar modelo genérico.")
-            self.plate_detector = YOLO('yolov8n.pt').to(device)
-        
-        self.ocr_reader = easyocr.Reader(['pt'], gpu=False) # Força o uso de CPU
-        logger.info("Modelo EasyOCR (OCR) carregado.")
+# Carregar modelos (fora da função para carregar apenas uma vez)
+vehicle_detector = YOLO("yolov8n.pt")
+# CORREÇÃO 2: A forma de inicializar a classe mudou.
+plate_recognizer = LicensePlateRecognizer(hub_ocr_model="global-plates-mobile-vit-v2-model")
 
-    def _clean_plate_text(self, text: str) -> str:
-        """Limpa e valida o texto da matrícula."""
-        cleaned = re.sub(r'[^A-Z0-9]', '', text.upper())
-        if len(cleaned) >= 5 and len(cleaned) <= 8: # Aumentado para 8 para placas Mercosul
-            return cleaned
-        return ""
+def process_camera_stream(camera: dict, api_client: APIClient):
+    """
+    Processa o stream de vídeo de uma câmera para detecção de veículos e placas.
+    """
+    rtsp_url = camera.get("rtsp_url")
+    camera_id = camera.get("id")
 
-    def process_frame(self, frame, camera_id: int):
-        """Processa um frame, deteta matrículas e extrai o texto."""
-        if frame is None: return None
+    cap = cv2.VideoCapture(rtsp_url)
 
-        # A classe 0 é geralmente 'license-plate' num modelo customizado
-        results = self.plate_detector(frame, verbose=False, conf=0.6)
+    if not cap.isOpened():
+        logging.error(f"Não foi possível abrir o stream da câmera {camera_id}: {rtsp_url}")
+        return
 
-        for result in results:
-            if len(result.boxes) > 0:
-                box = result.boxes[0] # Pega a deteção com maior confiança
-                coords = box.xyxy[0].cpu().numpy().astype(int)
-                confidence = float(box.conf[0])
-                
-                x1, y1, x2, y2 = coords
-                plate_image = frame[y1:y2, x1:x2]
+    logging.info(f"Iniciando processamento para a câmera {camera_id}...")
 
-                if plate_image.size == 0: continue
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            logging.error(f"Não foi possível ler o frame da câmera {camera_id}. A tentar reconectar...")
+            cap.release()
+            time.sleep(5)
+            cap = cv2.VideoCapture(rtsp_url)
+            continue
 
-                ocr_result = self.ocr_reader.readtext(plate_image, detail=0, paragraph=True)
+        vehicle_results = vehicle_detector(frame)[0]
 
-                if ocr_result:
-                    plate_number = self._clean_plate_text("".join(ocr_result))
-                    if plate_number:
-                        logger.info(f"CÂMARA {camera_id}: Matrícula detetada '{plate_number}'")
-                        return {
-                            "license_plate": plate_number,
-                            "confidence": confidence,
-                            "camera_id": camera_id,
-                        }
-        return None
+        for result in vehicle_results.boxes.data.tolist():
+            x1, y1, x2, y2, score, class_id = result
+
+            if score > 0.5 and vehicle_detector.names[int(class_id)] in ['car', 'truck', 'bus']:
+                vehicle_roi = frame[int(y1):int(y2), int(x1):int(x2)]
+
+                try:
+                    plate_results = plate_recognizer(image=vehicle_roi)
+
+                    if plate_results:
+                        for plate_result in plate_results:
+                            license_plate = plate_result["text"]
+                            logging.info(f"Placa detectada pela câmera {camera_id}: {license_plate}")
+
+                            # Certifique-se que a pasta 'captures' existe
+                            image_filename = f"captures/plate_{camera_id}_{license_plate}_{int(time.time())}.jpg"
+                            cv2.imwrite(image_filename, vehicle_roi)
+
+                            sighting_data = {
+                                "license_plate": license_plate,
+                                "image_filename": image_filename,
+                                "camera_id": camera_id
+                            }
+                            api_client.create_sighting(sighting_data)
+                except Exception as e:
+                    logging.error(f"Ocorreu um erro no reconhecimento de placa: {e}")
+
+    cap.release()

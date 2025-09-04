@@ -1,44 +1,49 @@
+from typing import AsyncGenerator
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
-from . import crud, models, schemas, config
-from .database import SessionLocal
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token", auto_error=False)
-api_key_header_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
+from . import crud, schemas, models
+from .database import AsyncSessionLocal
+from .config import settings
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependência assíncrona para obter uma sessão de banco de dados.
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        finally:
+            await db.close()
+
+async def get_current_user(
+    db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)
+) -> models.User:
+    """
+    Dependência para obter o usuário atual a partir do token JWT.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if token is None:
-        raise credentials_exception
     try:
-        payload = jwt.decode(token, config.settings.SECRET_KEY, algorithms=[config.settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-    except JWTError:
+        token_data = schemas.TokenData(email=email)
+    except (JWTError, ValidationError):
         raise credentials_exception
-    
-    user = crud.get_user_by_email(db, email=email)
+
+    user = await crud.get_user_by_email(db, email=token_data.email)
     if user is None:
         raise credentials_exception
     return user
-
-def get_service_user(api_key: str = Depends(api_key_header_scheme), db: Session = Depends(get_db)):
-    if api_key == config.settings.ADMIN_API_KEY:
-        admin_user = crud.get_user_by_email(db, email="admin@gtvision.com")
-        if admin_user:
-            return admin_user
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key for service")

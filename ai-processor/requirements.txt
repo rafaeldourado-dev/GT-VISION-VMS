@@ -3,7 +3,12 @@ numpy
 ultralytics
 torch
 requests
+pika
 python-dotenv
 loguru
-easyocr
-# Adicione onnxruntime se a sua versão do easyocr o exigir
+onnxruntime
+pyyaml>=5.1
+tqdm
+rich
+# Adiciona a instalação da biblioteca local a partir da pasta
+./fast-plate-ocr-master[onnx]
