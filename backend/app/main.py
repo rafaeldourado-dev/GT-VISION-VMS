@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from .database import async_engine, Base, AsyncSessionLocal
-from . import models, schemas, crud
+from . import models, schemas, crud, dependencies
 from .routers import auth, cameras, sightings, crm, dashboard
 
 app = FastAPI(
@@ -39,12 +39,18 @@ async def on_startup():
             await crud.create_user(db, user=admin_in)
 
 
-# Inclui os roteadores da aplicação
-app.include_router(auth.router, prefix="/api/auth", tags=["Autenticação"])
-app.include_router(cameras.router, prefix="/api/cameras", tags=["Câmeras"])
-app.include_router(sightings.router, prefix="/api/sightings", tags=["Detecções"])
-app.include_router(crm.router, prefix="/api/crm", tags=["CRM"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+# --- CORREÇÃO: Padronizando todos os prefixos para /api/v1 ---
+
+# O router de autenticação não precisa de dependências
+app.include_router(auth.router, prefix="/api/v1", tags=["Autenticação"])
+
+# Os outros routers precisam da dependência de autenticação
+auth_dependency = [Depends(dependencies.get_current_user)]
+
+app.include_router(cameras.router, prefix="/api/v1", tags=["Câmeras"], dependencies=auth_dependency)
+app.include_router(sightings.router, prefix="/api/v1", tags=["Detecções"], dependencies=auth_dependency)
+app.include_router(crm.router, prefix="/api/v1", tags=["CRM"], dependencies=auth_dependency)
+app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"], dependencies=auth_dependency)
 
 
 @app.get("/api/health", status_code=200, tags=["Status"])
