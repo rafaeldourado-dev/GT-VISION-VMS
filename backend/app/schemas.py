@@ -3,6 +3,10 @@ from typing import List, Optional
 from datetime import datetime
 from .models import UserRole
 
+# Schema para a câmera dentro da resposta de avistamento
+class CameraInSighting(BaseModel):
+    name: str
+
 # Schemas de Veículos (Sighting)
 class VehicleSightingBase(BaseModel):
     license_plate: str
@@ -15,11 +19,16 @@ class VehicleSightingCreate(VehicleSightingBase):
 class VehicleSighting(VehicleSightingBase):
     id: int
     timestamp: datetime
-
     class Config:
         from_attributes = True
 
-# --- SECÇÃO CORRIGIDA ---
+# --- NOVO SCHEMA PARA A RESPOSTA DO FRONTEND ---
+class VehicleSightingResponse(BaseModel):
+    id: int
+    plate: str
+    camera: CameraInSighting
+    timestamp: datetime
+
 # Schemas de Câmera
 class CameraBase(BaseModel):
     name: str
@@ -27,8 +36,6 @@ class CameraBase(BaseModel):
     is_active: bool = True
 
 class CameraCreate(CameraBase):
-    # CameraCreate deve herdar apenas os campos base.
-    # O client_id é adicionado pelo backend, não enviado pelo utilizador.
     pass
 
 class CameraUpdate(BaseModel):
@@ -38,13 +45,9 @@ class CameraUpdate(BaseModel):
 
 class Camera(CameraBase):
     id: int
-    client_id: int # Apenas o schema de resposta (Camera) deve ter o client_id
-    # Removido sightings para evitar carregamento excessivo de dados por defeito
-    # sightings: List[VehicleSighting] = [] 
-
+    client_id: int
     class Config:
         from_attributes = True
-# --- FIM DA SECÇÃO CORRIGIDA ---
 
 # Schemas de Usuário
 class UserBase(BaseModel):
@@ -60,11 +63,10 @@ class User(UserBase):
     is_active: bool
     client_id: int
     role: UserRole
-
     class Config:
         from_attributes = True
 
-# Schemas de Cliente (Organização)
+# Schemas de Cliente
 class ClientBase(BaseModel):
     name: str
 
@@ -74,10 +76,6 @@ class ClientCreate(ClientBase):
 class Client(ClientBase):
     id: int
     is_active: bool
-    # Removido users e cameras para evitar carregamento excessivo de dados por defeito
-    # users: List[User] = []
-    # cameras: List[Camera] = []
-
     class Config:
         from_attributes = True
 
@@ -94,7 +92,6 @@ class Lead(LeadBase):
     id: int
     status: str
     created_at: datetime
-
     class Config:
         from_attributes = True
 
@@ -109,5 +106,6 @@ class TokenData(BaseModel):
 # Schemas de Dashboard
 class DashboardStats(BaseModel):
     total_cameras: int
-    active_cameras: int
-    total_sightings_today: int
+    online_cameras: int
+    sightings_today: int
+    alerts_24h: int

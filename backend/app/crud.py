@@ -87,7 +87,7 @@ async def update_camera(db: AsyncSession, camera: models.Camera, update_data: sc
     update_data_dict = update_data.dict(exclude_unset=True)
     for key, value in update_data_dict.items():
         setattr(camera, key, value)
-    
+
     await db.commit()
     await db.refresh(camera)
     return camera
@@ -139,10 +139,10 @@ async def create_lead(db: AsyncSession, lead: schemas.LeadCreate) -> models.Lead
 # endregion
 
 # region Dashboard Stats
-async def get_dashboard_stats(db: AsyncSession, client_id: int) -> schemas.DashboardStats:
+async def get_dashboard_stats(db: AsyncSession, client_id: int) -> dict:
     """Busca estatísticas agregadas para o dashboard de um cliente."""
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
-    
+
     # Total de câmeras
     total_cameras_query = select(func.count(models.Camera.id)).filter(models.Camera.client_id == client_id)
     total_cameras_result = await db.execute(total_cameras_query)
@@ -162,10 +162,13 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int) -> schemas.Dashb
     )
     total_sightings_today_result = await db.execute(total_sightings_today_query)
     total_sightings_today = total_sightings_today_result.scalar_one()
-    
-    return schemas.DashboardStats(
-        total_cameras=total_cameras,
-        active_cameras=active_cameras,
-        total_sightings_today=total_sightings_today,
-    )
+
+    # --- CORREÇÃO AQUI ---
+    # Retorna um dicionário com os nomes de campo que o frontend espera
+    return {
+        "total_cameras": total_cameras,
+        "online_cameras": active_cameras,      # Renomeado de 'active_cameras'
+        "sightings_today": total_sightings_today, # Renomeado de 'total_sightings_today'
+        "alerts_24h": 0,                        # Valor fixo, pois a lógica não existe
+    }
 # endregion
