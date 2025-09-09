@@ -1,60 +1,61 @@
+import os
 import requests
 import logging
-import os
+from typing import List, Dict, Any
 
 class APIClient:
-    """
-    Cliente para comunicar com a API do backend GT-Vision.
-    """
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.logger = logging.getLogger(__name__)
-        # Estratégia de autenticação: Carregar um token de um ficheiro ou variável de ambiente
-        # Isto é mais seguro do que deixar o token no código.
-        self.auth_token = os.getenv("API_ACCESS_TOKEN", None)
-        self.headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
-
+        self.api_key = os.getenv("ADMIN_API_KEY")
+        if not self.api_key:
+            self.logger.error("A variável de ambiente ADMIN_API_KEY não está definida.")
+            raise ValueError("Chave de API não encontrada.")
+        self.headers = {"X-API-Key": self.api_key}
 
     def check_api_health(self) -> bool:
-        """Verifica se a API do backend está acessível."""
         try:
-            response = requests.get(f"{self.base_url}/api/health", timeout=5)
-            response.raise_for_status()
-            self.logger.info("API está disponível!")
-            return True
+            response = requests.get(f"{self.base_url}/api/health")
+            if response.status_code == 200:
+                self.logger.info("API do backend está disponível!")
+                return True
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"API indisponível: {e}")
-            return False
+            self.logger.error(f"Não foi possível conectar à API do backend: {e}")
+        return False
 
-    def get_cameras_from_api(self) -> list:
-        """Busca a lista de câmeras ativas da API do backend."""
+    def get_cameras_from_api(self) -> List[Dict[str, Any]]:
+        # ALTERAÇÃO IMPORTANTE: Apontar para a nova rota interna
+        internal_cameras_url = f"{self.base_url}/api/v1/internal/cameras"
+        self.logger.info(f"A buscar câmaras do endpoint interno: {internal_cameras_url}")
+        
         try:
-            api_url = f"{self.base_url}/api/v1/cameras/"
-            response = requests.get(api_url, headers=self.headers, timeout=10)
-
-            if response.status_code == 401:
-                self.logger.error("Erro de autenticação (401). O ai-processor precisa de um token de acesso válido.")
-                return []
-
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            self.logger.error(f"Erro HTTP ao buscar câmeras: {e.response.status_code} - {e.response.text}")
+            response = requests.get(internal_cameras_url, headers=self.headers)
+            if response.status_code == 200:
+                self.logger.info(f"Encontradas {len(response.json())} câmaras para processar.")
+                return response.json()
+            elif response.status_code == 401:
+                self.logger.error("ERRO 401: A chave de API interna (ADMIN_API_KEY) é inválida. Verifique o ficheiro .env em ambos os serviços.")
+            else:
+                self.logger.error(f"Erro ao buscar câmaras. Status: {response.status_code}, Resposta: {response.text}")
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Erro de conexão ao buscar câmeras: {e}")
+            self.logger.error(f"Erro de conexão ao buscar câmaras: {e}")
         return []
 
     def send_sighting_to_api(self, plate: str, image_filename: str, camera_id: int):
-        """Envia um novo avistamento de veículo para a API."""
+        # A rota de avistamentos precisa ser protegida da mesma forma (assumindo que seja interna)
+        # Se for para utilizadores, a lógica terá de ser diferente. Por agora, vamos usar a chave de API.
+        sighting_url = f"{self.base_url}/api/v1/sightings/"
+        files = {'image_file': (os.path.basename(image_filename), open(image_filename, 'rb'), 'image/jpeg')}
+        data = {"plate": plate, "camera_id": camera_id}
+        
         try:
-            api_url = f"{self.base_url}/api/v1/sightings/vehicle"
-            payload = {
-                "license_plate": plate,
-                "image_filename": image_filename,
-                "camera_id": camera_id
-            }
-            response = requests.post(api_url, json=payload, timeout=10) # Não precisa de token para este endpoint
-            response.raise_for_status()
-            self.logger.info(f"Avistamento da placa '{plate}' enviado com sucesso para a API.")
+            response = requests.post(sighting_url, files=files, data=data, headers=self.headers)
+            if response.status_code == 201:
+                self.logger.info(f"Avistamento da placa {plate} enviado com sucesso.")
+            else:
+                self.logger.error(f"Falha ao enviar avistamento. Status: {response.status_code}, Resposta: {response.text}")
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Falha ao enviar avistamento para a API: {e}")
+            self.logger.error(f"Erro de conexão ao enviar avistamento: {e}")
+        finally:
+            if 'image_file' in files:
+                files['image_file'][1].close()

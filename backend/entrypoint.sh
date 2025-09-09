@@ -3,8 +3,7 @@ set -e
 
 echo "Waiting for PostgreSQL..."
 
-# --- CORREÇÃO AQUI: Usa pg_isready em vez de nc ---
-# As variáveis de ambiente (PGUSER, PGDATABASE, etc.) são lidas a partir do ficheiro .env
+# Usa pg_isready para verificar se a base de dados está pronta
 while ! pg_isready -h db -p 5432 -q -U "$POSTGRES_USER"; do
   >&2 echo "Postgres is unavailable - sleeping"
   sleep 1

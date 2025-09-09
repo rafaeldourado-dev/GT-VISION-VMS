@@ -1,6 +1,4 @@
-# Remove a linha 'version' que está obsoleta
 services:
-  # Serviço do Banco de Dados PostgreSQL
   db:
     image: postgres:13-alpine
     container_name: gt-vision-db
@@ -19,7 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Serviço do Message Broker RabbitMQ
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: gt-vision-rabbitmq
@@ -37,7 +34,6 @@ services:
         timeout: 5s
         retries: 5
 
-  # Serviço do Backend (API)
   backend:
     build: ./backend
     container_name: gt-vision-backend
@@ -62,7 +58,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # Serviço do Processador de IA
   ai-processor:
     build: ./ai-processor
     container_name: gt-vision-ai-processor
@@ -70,10 +65,7 @@ services:
       - ./ai-processor:/app
     env_file:
       - .env
-    # --- TOKEN ADICIONADO AQUI ---
-    environment:
-      - API_ACCESS_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsImV4cCI6MTc1NzQyNjY5NH0.0rpHOZkKNBwSXDIglsinXnT4fFagBkukF9kUJrdr9KU
-    # --- FIM DA ALTERAÇÃO ---
+    # A seção 'environment' com o token JWT foi removida daqui
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -83,12 +75,9 @@ services:
       - gtv_network
     restart: unless-stopped
 
-# Volumes nomeados para persistência de dados
 volumes:
   postgres_data:
 
-# Rede customizada para a comunicação entre os contêineres
 networks:
   gtv_network:
     driver: bridge
-
