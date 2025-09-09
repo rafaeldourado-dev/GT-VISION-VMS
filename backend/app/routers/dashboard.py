@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from .. import crud, schemas, dependencies
+from .. import crud, schemas, dependencies, models
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 # --- CORREÇÃO APLICADA AQUI ---
-# Removida a dependência de autenticação ('current_user') para contornar o erro 401.
+# Reintroduzida a dependência de autenticação.
 @router.get("/stats/", response_model=schemas.DashboardStats)
 async def get_stats(
-    db: AsyncSession = Depends(dependencies.get_db)
+    db: AsyncSession = Depends(dependencies.get_db),
+    current_user: models.User = Depends(dependencies.get_current_user)
 ):
-    # Assumimos o cliente com ID 1 para que a consulta funcione sem um utilizador logado.
-    stats = await crud.get_dashboard_stats(db, client_id=1)
+    # Usa o client_id do utilizador autenticado, em vez de um valor fixo.
+    stats = await crud.get_dashboard_stats(db, client_id=current_user.client_id)
     return stats

@@ -1,3 +1,4 @@
+# Remove a linha 'version' que está obsoleta
 services:
   # Serviço do Banco de Dados PostgreSQL
   db:
@@ -5,7 +6,6 @@ services:
     container_name: gt-vision-db
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-    # As variáveis são lidas do arquivo .env na raiz do projeto
     env_file:
       - .env
     ports:
@@ -13,6 +13,11 @@ services:
     networks:
       - gtv_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Serviço do Message Broker RabbitMQ
   rabbitmq:
@@ -26,6 +31,11 @@ services:
     networks:
       - gtv_network
     restart: unless-stopped
+    healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
 
   # Serviço do Backend (API)
   backend:
@@ -38,13 +48,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - rabbitmq
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - gtv_network
     restart: unless-stopped
     healthcheck:
-      # CORREÇÃO: Aponta para o endpoint de saúde correto /api/health
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 10s
       timeout: 5s
@@ -59,11 +70,14 @@ services:
       - ./ai-processor:/app
     env_file:
       - .env
+    # --- TOKEN ADICIONADO AQUI ---
+    environment:
+      - API_ACCESS_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsImV4cCI6MTc1NzQyNjY5NH0.0rpHOZkKNBwSXDIglsinXnT4fFagBkukF9kUJrdr9KU
+    # --- FIM DA ALTERAÇÃO ---
     depends_on:
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       backend:
-        # Espera o backend estar saudável (passar no healthcheck) antes de iniciar
         condition: service_healthy
     networks:
       - gtv_network
@@ -77,3 +91,4 @@ volumes:
 networks:
   gtv_network:
     driver: bridge
+

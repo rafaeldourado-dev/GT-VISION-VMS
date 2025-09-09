@@ -51,6 +51,7 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate) -> models.User
         hashed_password=hashed_password,
         client_id=user.client_id,
         role=user.role,
+        full_name=user.full_name,
     )
     db.add(db_user)
     await db.commit()
@@ -163,7 +164,6 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int) -> dict:
     total_sightings_today_result = await db.execute(total_sightings_today_query)
     total_sightings_today = total_sightings_today_result.scalar_one()
 
-    # --- CORREÇÃO AQUI ---
     # Retorna um dicionário com os nomes de campo que o frontend espera
     return {
         "total_cameras": total_cameras,

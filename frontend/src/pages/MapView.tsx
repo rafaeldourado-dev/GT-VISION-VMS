@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Map, { Marker, Popup } from 'react-map-gl';
 import {Camera, Eye} from 'lucide-react';

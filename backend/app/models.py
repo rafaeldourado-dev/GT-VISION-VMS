@@ -8,15 +8,17 @@ from sqlalchemy import (
     String,
     DateTime,
     Enum as SQLAlchemyEnum,
+    Float,
 )
 from sqlalchemy.orm import relationship
-from .database import Base
+from .database import Base  # <--- Certifique-se que esta linha está correta
 
 class UserRole(enum.Enum):
     ADMIN = "admin"
     CLIENT_ADMIN = "client_admin"
     CLIENT_USER = "client_user"
 
+# ... (o resto do seu ficheiro models.py continua igual)
 class Client(Base):
     __tablename__ = "clients"
     id = Column(Integer, primary_key=True, index=True)
@@ -31,6 +33,7 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     role = Column(SQLAlchemyEnum(UserRole), default=UserRole.CLIENT_USER, nullable=False)
@@ -42,9 +45,10 @@ class Camera(Base):
     __tablename__ = "cameras"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
-    # --- LINHA ADICIONADA AQUI ---
     rtsp_url = Column(String, unique=True, index=True, nullable=False)
     is_active = Column(Boolean, default=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)

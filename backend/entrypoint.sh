@@ -1,23 +1,20 @@
-#!/bin/bash
+#!/bin/sh
+set -e
 
-# Define as variáveis de ambiente com valores padrão (opcional, mas bom para depuração)
-DB_HOST=${DB_HOST:-gt-vision-db}
-DB_PORT=${DB_PORT:-5432}
-DB_USER=${POSTGRES_USER:-user} # Certifique-se que POSTGRES_USER está sendo passado
+echo "Waiting for PostgreSQL..."
 
-# Espere o PostgreSQL estar pronto para aceitar conexões
-echo "Aguardando o banco de dados em ${DB_HOST}:${DB_PORT} ficar pronto..."
-while ! pg_isready -h "$DB_HOST" -p "$DB_PORT" -q -U "$DB_USER"; do
-  echo "Banco de dados indisponível - aguardando..."
-  sleep 2
+# --- CORREÇÃO AQUI: Usa pg_isready em vez de nc ---
+# As variáveis de ambiente (PGUSER, PGDATABASE, etc.) são lidas a partir do ficheiro .env
+while ! pg_isready -h db -p 5432 -q -U "$POSTGRES_USER"; do
+  >&2 echo "Postgres is unavailable - sleeping"
+  sleep 1
 done
-echo "Banco de dados pronto!"
 
-# Aplica as migrações do Alembic
-echo "Aplicando migrações do banco de dados..."
+>&2 echo "PostgreSQL is up - executing command"
+
+# Executa as migrações da base de dados
+echo "Running database migrations..."
 alembic upgrade head
 
-# Inicia a aplicação FastAPI com Uvicorn
-echo "Iniciando o servidor da API..."
-# O exec "$@" executa o comando passado como CMD no Dockerfile
+# Inicia a aplicação (o CMD do Dockerfile)
 exec "$@"

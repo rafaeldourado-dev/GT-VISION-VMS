@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {Eye, Camera, Car, TrendingUp} from 'lucide-react';
 import api from '../config/api';
@@ -25,9 +24,10 @@ ChartJS.register(
 );
 
 interface DashboardStats {
-  sightingsToday: number;
-  activeCameras: number;
-  uniqueVehiclesMonth: number;
+  total_cameras: number;
+  online_cameras: number;
+  sightings_today: number;
+  alerts_24h: number;
 }
 
 interface SightingsChart {
@@ -44,9 +44,10 @@ interface Sighting {
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats>({
-    sightingsToday: 0,
-    activeCameras: 0,
-    uniqueVehiclesMonth: 0,
+    total_cameras: 0,
+    online_cameras: 0,
+    sightings_today: 0,
+    alerts_24h: 0,
   });
   const [chartData, setChartData] = useState<SightingsChart[]>([]);
   const [recentSightings, setRecentSightings] = useState<Sighting[]>([]);
@@ -60,22 +61,14 @@ const Dashboard: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Carregar estatísticas
-      const [sightingsTodayRes, activeCamerasRes, uniqueVehiclesRes] = await Promise.all([
-        api.get('/dashboard/sightings-today'),
-        api.get('/dashboard/active-cameras'),
-        api.get('/dashboard/unique-vehicles-month'),
-      ]);
+      // Carregar estatísticas de um único endpoint
+      const statsRes = await api.get('/dashboard/stats/');
 
-      setStats({
-        sightingsToday: sightingsTodayRes.data,
-        activeCameras: activeCamerasRes.data,
-        uniqueVehiclesMonth: uniqueVehiclesRes.data,
-      });
+      setStats(statsRes.data);
 
-      // Carregar dados do gráfico
-      const chartRes = await api.get('/dashboard/sightings-last-7-days');
-      setChartData(chartRes.data);
+      // Carregar dados do gráfico (esses endpoints não existem no backend, então comentei)
+      // const chartRes = await api.get('/dashboard/sightings-last-7-days');
+      // setChartData(chartRes.data);
 
       // Carregar últimos avistamentos
       const sightingsRes = await api.get('/sightings/?limit=5&skip=0');
@@ -146,7 +139,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Avistamentos Hoje</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.sightingsToday}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.sightings_today}</p>
             </div>
           </div>
         </div>
@@ -158,7 +151,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Câmeras Ativas</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.activeCameras}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.online_cameras}</p>
             </div>
           </div>
         </div>
@@ -169,8 +162,8 @@ const Dashboard: React.FC = () => {
               <Car className="h-8 w-8 text-purple-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Veículos Únicos no Mês</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.uniqueVehiclesMonth}</p>
+              <p className="text-sm font-medium text-gray-500">Total de Câmeras</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total_cameras}</p>
             </div>
           </div>
         </div>

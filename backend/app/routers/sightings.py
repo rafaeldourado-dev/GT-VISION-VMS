@@ -10,28 +10,32 @@ async def create_sighting(
     sighting: schemas.VehicleSightingCreate,
     db: AsyncSession = Depends(dependencies.get_db),
 ):
+    # Este endpoint pode permanecer público se for o AI-Processor a enviar dados.
     return await crud.create_vehicle_sighting(db=db, sighting=sighting)
 
 # --- CORREÇÃO APLICADA AQUI ---
-# A rota foi alterada de "/" para "" para corrigir o erro de redirecionamento 307.
-@router.get("", response_model=List[schemas.VehicleSightingResponse])
+# A rota foi alterada de "" para "/" para ser mais explícita e padrão.
+# A dependência de autenticação foi reintroduzida.
+@router.get("/", response_model=List[schemas.VehicleSightingResponse])
 async def read_sightings(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(dependencies.get_db),
+    current_user: models.User = Depends(dependencies.get_current_user),
 ):
-    # Assumimos o cliente com ID 1 para que a consulta funcione.
+    # Usa o client_id do utilizador autenticado.
     db_sightings = await crud.get_sightings_by_client(
-        db, client_id=1, skip=skip, limit=limit
+        db, client_id=current_user.client_id, skip=skip, limit=limit
     )
     
+    # Adapta a resposta para o formato esperado pelo frontend.
     response_data = [
-        {
-            "id": s.id,
-            "plate": s.license_plate,
-            "camera": {"name": s.camera.name if s.camera else "N/A"},
-            "timestamp": s.timestamp,
-        }
+        schemas.VehicleSightingResponse(
+            id=s.id,
+            plate=s.license_plate,
+            camera={"name": s.camera.name if s.camera else "N/A"},
+            timestamp=s.timestamp,
+        )
         for s in db_sightings
     ]
     return response_data

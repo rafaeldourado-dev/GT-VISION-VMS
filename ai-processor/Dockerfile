@@ -21,8 +21,12 @@ COPY fast-plate-ocr-master ./fast-plate-ocr-master
 # 4. Instala as dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copia o resto do código da aplicação
-COPY . .
+# --- CORREÇÃO AQUI ---
+# 5. Copia o resto do código da aplicação e o modelo de forma seletiva
+COPY api_client.py .
+COPY detection.py .
+COPY main.py .
+COPY yolov8n.pt . 
 
 # 6. Cria a pasta para guardar as imagens capturadas
 RUN mkdir -p /app/captures

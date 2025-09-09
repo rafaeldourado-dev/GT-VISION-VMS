@@ -1,0 +1,17 @@
+# .dockerignore para o Backend
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+
+# IDEs
+.idea/
+.vscode/

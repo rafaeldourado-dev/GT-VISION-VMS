@@ -34,6 +34,8 @@ class CameraBase(BaseModel):
     name: str
     rtsp_url: str
     is_active: bool = True
+    latitude: float
+    longitude: float
 
 class CameraCreate(CameraBase):
     pass
@@ -42,6 +44,9 @@ class CameraUpdate(BaseModel):
     name: Optional[str] = None
     rtsp_url: Optional[str] = None
     is_active: Optional[bool] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 
 class Camera(CameraBase):
     id: int
@@ -52,6 +57,7 @@ class Camera(CameraBase):
 # Schemas de Usuário
 class UserBase(BaseModel):
     email: EmailStr
+    full_name: str
 
 class UserCreate(UserBase):
     password: str

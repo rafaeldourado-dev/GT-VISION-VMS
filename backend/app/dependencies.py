@@ -6,16 +6,13 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import crud, schemas, models
-from .database import AsyncSessionLocal
+from .database import SessionLocal # <-- CORRIGIDO AQUI
 from .config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependência assíncrona para obter uma sessão de banco de dados.
-    """
-    async with AsyncSessionLocal() as db:
+    async with SessionLocal() as db: # <-- CORRIGIDO AQUI
         try:
             yield db
         finally:
@@ -24,9 +21,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def get_current_user(
     db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> models.User:
-    """
-    Dependência para obter o usuário atual a partir do token JWT.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",

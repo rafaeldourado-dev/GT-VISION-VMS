@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {Plus, Camera, MapPin, Activity} from 'lucide-react';
 import { Dialog } from '@headlessui/react';
@@ -10,6 +9,7 @@ interface CameraData {
   name: string;
   latitude: number;
   longitude: number;
+  rtsp_url: string; // Adicionei este campo
   is_active: boolean;
 }
 
@@ -20,6 +20,7 @@ const Cameras: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    rtsp_url: '', // Adicionei este campo
     latitude: '',
     longitude: '',
   });
@@ -55,6 +56,7 @@ const Cameras: React.FC = () => {
     try {
       const payload = {
         name: formData.name,
+        rtsp_url: formData.rtsp_url, // Use o novo campo
         latitude: parseFloat(formData.latitude),
         longitude: parseFloat(formData.longitude),
       };
@@ -62,7 +64,7 @@ const Cameras: React.FC = () => {
       const response = await api.post('/cameras/', payload);
       setCameras([...cameras, response.data]);
       setShowAddModal(false);
-      setFormData({ name: '', latitude: '', longitude: '' });
+      setFormData({ name: '', rtsp_url: '', latitude: '', longitude: '' }); // Limpe o novo campo
       toast.success('Câmera adicionada com sucesso!');
     } catch (error: any) {
       console.error('Erro ao adicionar câmera:', error);
@@ -77,7 +79,7 @@ const Cameras: React.FC = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', latitude: '', longitude: '' });
+    setFormData({ name: '', rtsp_url: '', latitude: '', longitude: '' });
   };
 
   if (isLoading) {
@@ -209,6 +211,22 @@ const Cameras: React.FC = () => {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Ex: CAM-01 Entrada Principal"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="rtsp_url" className="block text-sm font-medium text-gray-700 mb-1">
+                    URL RTSP
+                  </label>
+                  <input
+                    type="text"
+                    id="rtsp_url"
+                    name="rtsp_url"
+                    required
+                    value={formData.rtsp_url}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="rtsp://user:pass@ip:port/stream"
                   />
                 </div>
 
