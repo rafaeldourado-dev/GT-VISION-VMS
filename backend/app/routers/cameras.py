@@ -1,6 +1,9 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
+import cv2
+import asyncio
 
 from .. import crud, schemas, dependencies, models, messaging
 
@@ -88,3 +91,63 @@ async def delete_camera(
 
     await crud.delete_camera(db=db, camera_id=camera_id)
     return
+
+# --- NOVA ROTA DE STREAMING DE VÍDEO ---
+
+async def generate_frames(rtsp_url: str):
+    """
+    Gerador que captura frames da câmera, codifica para JPEG e envia.
+    Tenta reconectar-se se o stream cair.
+    """
+    while True:
+        # Usamos a API do FFMPEG para maior compatibilidade com RTSP
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            print(f"Erro ao abrir o stream: {rtsp_url}. Tentando novamente em 5s.")
+            await asyncio.sleep(5)
+            continue
+
+        print(f"Stream conectado com sucesso: {rtsp_url}")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print(f"Frame perdido. Reconectando ao stream: {rtsp_url}")
+                break
+
+            # Codifica o frame para JPEG
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if not ret:
+                continue
+
+            frame_bytes = buffer.tobytes()
+            # Envia o frame no formato multipart/x-mixed-replace
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            
+            # Controla o FPS para ~30
+            await asyncio.sleep(1/30)
+        
+        cap.release()
+        await asyncio.sleep(5)
+
+
+@router.get("/{camera_id}/stream", summary="Obtém o stream de vídeo ao vivo de uma câmera")
+async def stream_camera(
+    camera_id: int,
+    db: AsyncSession = Depends(dependencies.get_db),
+    current_user: models.User = Depends(dependencies.get_current_user),
+):
+    """
+    Endpoint que retorna um stream de vídeo no formato MJPEG.
+    Pode ser usado diretamente no `src` de uma tag `<img>` no frontend.
+    """
+    db_camera = await crud.get_camera_by_id(db, camera_id=camera_id)
+    
+    if not db_camera or db_camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Câmera não encontrada")
+
+    # Usa o campo rtsp_url que você já tem no seu modelo
+    return StreamingResponse(
+        generate_frames(db_camera.rtsp_url),
+        media_type='multipart/x-mixed-replace; boundary=frame'
+    )
