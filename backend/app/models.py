@@ -9,16 +9,18 @@ from sqlalchemy import (
     DateTime,
     Enum as SQLAlchemyEnum,
     Float,
+    func,
 )
 from sqlalchemy.orm import relationship
-from .database import Base  # <--- Certifique-se que esta linha está correta
+from .database import Base  
 
+# Enumeração para os papéis dos usuários
 class UserRole(enum.Enum):
     ADMIN = "admin"
     CLIENT_ADMIN = "client_admin"
     CLIENT_USER = "client_user"
 
-# ... (o resto do seu ficheiro models.py continua igual)
+# Modelos de Banco de Dados
 class Client(Base):
     __tablename__ = "clients"
     id = Column(Integer, primary_key=True, index=True)
@@ -29,6 +31,7 @@ class Client(Base):
     users = relationship("User", back_populates="client", cascade="all, delete-orphan")
     cameras = relationship("Camera", back_populates="client", cascade="all, delete-orphan")
 
+#  Schemas de Câmera
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -41,6 +44,7 @@ class User(Base):
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     client = relationship("Client", back_populates="users")
 
+# Schemas de Sighting
 class Camera(Base):
     __tablename__ = "cameras"
     id = Column(Integer, primary_key=True, index=True)
@@ -55,6 +59,7 @@ class Camera(Base):
     client = relationship("Client", back_populates="cameras")
     sightings = relationship("VehicleSighting", back_populates="camera", cascade="all, delete-orphan")
 
+# Schemas de VehicleSighting
 class VehicleSighting(Base):
     __tablename__ = "vehicle_sightings"
     id = Column(Integer, primary_key=True, index=True)
@@ -65,6 +70,7 @@ class VehicleSighting(Base):
     camera_id = Column(Integer, ForeignKey("cameras.id"))
     camera = relationship("Camera", back_populates="sightings")
 
+# Schemas de Lead
 class Lead(Base):
     __tablename__ = "leads"
     id = Column(Integer, primary_key=True, index=True)
@@ -73,3 +79,16 @@ class Lead(Base):
     phone = Column(String, nullable=True)
     status = Column(String, default="new")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# Schemas de Ticket
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subject = Column(String, index=True)
+    description = Column(String)
+    status = Column(String, default="open") 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    owner_id = Column(Integer, ForeignKey("users.id"))
+
+    owner = relationship("User")

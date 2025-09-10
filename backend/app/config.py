@@ -43,12 +43,12 @@ class Settings(BaseSettings):
     # O resto das suas configurações
     SECRET_KEY: str
     ALGORITHM: str # Removido o valor padrão "HS268" para usar o do .env
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "admin"
-    RABBITMQ_DEFAULT_USER: str = "user"
-    RABBITMQ_DEFAULT_PASS: str = "password"
-    RABBITMQ_HOST: str = "gt-vision-rabbitmq"
+    RABBITMQ_DEFAULT_USER: str
+    RABBITMQ_DEFAULT_PASS: str
+    RABBITMQ_HOST: str
 
 # Instância única que será usada em toda a aplicação
 settings = Settings()

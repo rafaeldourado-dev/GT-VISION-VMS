@@ -115,3 +115,20 @@ class DashboardStats(BaseModel):
     online_cameras: int
     sightings_today: int
     alerts_24h: int
+
+# Schemas para Tickets
+class TicketBase(BaseModel):
+    subject: str
+    description: str
+
+class TicketCreate(TicketBase):
+    pass
+
+class Ticket(TicketBase):
+    id: int
+    owner_id: int
+    status: str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

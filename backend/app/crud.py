@@ -171,4 +171,23 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int) -> dict:
         "sightings_today": total_sightings_today, # Renomeado de 'total_sightings_today'
         "alerts_24h": 0,                        # Valor fixo, pois a lógica não existe
     }
+# adicionando a função get_dashboard_stats
+async def create_ticket(db: AsyncSession, ticket: schemas.TicketCreate, user_id: int) -> models.Ticket:
+    """Cria um novo ticket de suporte para um usuário."""
+    db_ticket = models.Ticket(**ticket.dict(), owner_id=user_id)
+    db.add(db_ticket)
+    await db.commit()
+    await db.refresh(db_ticket)
+    return db_ticket
+
+async def get_tickets_by_user(db: AsyncSession, user_id: int, skip: int = 0, limit: int = 100):
+    """Lista os tickets de um usuário específico."""
+    result = await db.execute(
+        select(models.Ticket)
+        .filter(models.Ticket.owner_id == user_id)
+        .order_by(models.Ticket.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    return result.scalars().all()
 # endregion

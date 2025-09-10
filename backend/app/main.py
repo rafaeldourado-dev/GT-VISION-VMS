@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 # Correção: Alterado 'AsyncSessionLocal' para 'SessionLocal' para corresponder a database.py
 from .database import engine, Base, SessionLocal
 from . import models, schemas, crud, dependencies
-from .routers import auth, cameras, sightings, crm, dashboard
+from .routers import auth, cameras, sightings, crm, dashboard, tickets
+
 
 app = FastAPI(
     title="GT-Vision API",
@@ -51,6 +52,7 @@ app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(sightings.router, prefix="/api/v1", tags=["Detecções"])
 app.include_router(cameras.router, prefix="/api/v1", tags=["Câmeras"])
 app.include_router(crm.router, prefix="/api/v1", tags=["CRM"])
+app.include_router(tickets.router, prefix="/api/v1", tags=["Tickets"])
 
 @app.get("/api/health", status_code=200, tags=["Status"])
 def health_check():

@@ -75,6 +75,19 @@ services:
       - gtv_network
     restart: unless-stopped
 
+  media-server:
+    image: bluenviron/mediamtx:latest
+    container_name: gt-vision-media-server
+    ports:
+      - "8554:8554"  # Porta para receber streams RTSP
+      - "8888:8888"  # Porta para servir streams HLS (para o navegador)
+      - "1935:1935"  # Porta RTMP (opcional)
+    environment:
+      - MTX_PROTOCOLS=tcp
+    networks:
+      - gtv_network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
 
