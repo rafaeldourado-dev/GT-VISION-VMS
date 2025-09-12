@@ -15,5 +15,6 @@ done
 echo "Running database migrations..."
 alembic upgrade head
 
-# Inicia a aplicação (o CMD do Dockerfile)
-exec "$@"
+# --- CORREÇÃO AQUI ---
+# Inicia a aplicação com a flag --reload para desenvolvimento
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

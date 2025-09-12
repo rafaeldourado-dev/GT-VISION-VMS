@@ -12,3 +12,4 @@ pydantic-settings
 pika
 psycopg2-binary
 opencv-python-headless
+httpx

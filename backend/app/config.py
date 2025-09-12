@@ -2,17 +2,14 @@ from pydantic import PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # Esta linha diz ao Pydantic para carregar as variáveis do seu ficheiro .env
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
-    # Variáveis que vêm diretamente do seu .env
     POSTGRES_SERVER: str
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_PORT: int = 5432
 
-    # Propriedade que constrói a URL da base de dados síncrona para o Alembic
     @property
     def DATABASE_URL(self) -> str:
         return str(
@@ -22,11 +19,10 @@ class Settings(BaseSettings):
                 password=self.POSTGRES_PASSWORD,
                 host=self.POSTGRES_SERVER,
                 port=self.POSTGRES_PORT,
-                path=self.POSTGRES_DB,
+                path=f"{self.POSTGRES_DB}"
             )
         )
 
-    # Propriedade que constrói a URL da base de dados assíncrona
     @property
     def DATABASE_URL_ASYNC(self) -> str:
         return str(
@@ -36,19 +32,13 @@ class Settings(BaseSettings):
                 password=self.POSTGRES_PASSWORD,
                 host=self.POSTGRES_SERVER,
                 port=self.POSTGRES_PORT,
-                path=self.POSTGRES_DB,
+                path=f"{self.POSTGRES_DB}"
             )
         )
 
-    # O resto das suas configurações
     SECRET_KEY: str
-    ALGORITHM: str # Removido o valor padrão "HS268" para usar o do .env
+    ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    ADMIN_EMAIL: str = "admin@example.com"
-    ADMIN_PASSWORD: str = "admin"
-    RABBITMQ_DEFAULT_USER: str
-    RABBITMQ_DEFAULT_PASS: str
-    RABBITMQ_HOST: str
+    ADMIN_API_KEY: str
 
-# Instância única que será usada em toda a aplicação
 settings = Settings()

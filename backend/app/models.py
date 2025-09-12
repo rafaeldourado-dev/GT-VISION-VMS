@@ -40,35 +40,42 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     role = Column(SQLAlchemyEnum(UserRole), default=UserRole.CLIENT_USER, nullable=False)
-
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     client = relationship("Client", back_populates="users")
+    tickets = relationship("Ticket", back_populates="owner")
 
-# Schemas de Sighting
+
 class Camera(Base):
     __tablename__ = "cameras"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    name = Column(String, index=True, nullable=False)
     rtsp_url = Column(String, unique=True, index=True, nullable=False)
     is_active = Column(Boolean, default=True)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     client = relationship("Client", back_populates="cameras")
     sightings = relationship("VehicleSighting", back_populates="camera", cascade="all, delete-orphan")
 
-# Schemas de VehicleSighting
+# --- ALTERAÇÕES AQUI ---
 class VehicleSighting(Base):
     __tablename__ = "vehicle_sightings"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     license_plate = Column(String, index=True)
-    image_filename = Column(String)
+    
+    # NOVOS CAMPOS PARA O MVP
+    vehicle_color = Column(String, index=True, nullable=True)
+    vehicle_model = Column(String, index=True, nullable=True)
+    image_path = Column(String, nullable=True) # Nome do ficheiro da imagem
 
     camera_id = Column(Integer, ForeignKey("cameras.id"))
     camera = relationship("Camera", back_populates="sightings")
+# -----------------------
 
 # Schemas de Lead
 class Lead(Base):
@@ -87,8 +94,9 @@ class Ticket(Base):
     id = Column(Integer, primary_key=True, index=True)
     subject = Column(String, index=True)
     description = Column(String)
-    status = Column(String, default="open") 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String, default="open")
+    priority = Column(String, default="medium")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    owner = relationship("User")
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner = relationship("User", back_populates="tickets")

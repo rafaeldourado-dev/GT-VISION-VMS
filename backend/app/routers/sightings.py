@@ -1,41 +1,38 @@
-from typing import List
 from fastapi import APIRouter, Depends
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from .. import crud, schemas, dependencies, models
 
-router = APIRouter(prefix="/sightings", tags=["sightings"])
+from ..dependencies import get_db, get_current_user
+from .. import crud, models, schemas
 
-@router.post("/vehicle", response_model=schemas.VehicleSighting)
-async def create_sighting(
-    sighting: schemas.VehicleSightingCreate,
-    db: AsyncSession = Depends(dependencies.get_db),
-):
-    # Este endpoint pode permanecer público se for o AI-Processor a enviar dados.
-    return await crud.create_vehicle_sighting(db=db, sighting=sighting)
+router = APIRouter(
+    prefix="/sightings",
+    tags=["Detecções"],
+    dependencies=[Depends(get_current_user)],
+    responses={404: {"description": "Not found"}},
+)
 
-# --- CORREÇÃO APLICADA AQUI ---
-# A rota foi alterada de "" para "/" para ser mais explícita e padrão.
-# A dependência de autenticação foi reintroduzida.
 @router.get("/", response_model=List[schemas.VehicleSightingResponse])
 async def read_sightings(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(dependencies.get_db),
-    current_user: models.User = Depends(dependencies.get_current_user),
+    license_plate: Optional[str] = None,
+    vehicle_color: Optional[str] = None,
+    vehicle_model: Optional[str] = None,
 ):
-    # Usa o client_id do utilizador autenticado.
-    db_sightings = await crud.get_sightings_by_client(
-        db, client_id=current_user.client_id, skip=skip, limit=limit
+    """
+    Recupera uma lista de avistamentos de veículos para o cliente do utilizador,
+    com filtros opcionais.
+    """
+    sightings = await crud.get_sightings_by_client(
+        db=db, 
+        client_id=current_user.client_id, 
+        skip=skip, 
+        limit=limit,
+        license_plate=license_plate,
+        vehicle_color=vehicle_color,
+        vehicle_model=vehicle_model
     )
-    
-    # Adapta a resposta para o formato esperado pelo frontend.
-    response_data = [
-        schemas.VehicleSightingResponse(
-            id=s.id,
-            plate=s.license_plate,
-            camera={"name": s.camera.name if s.camera else "N/A"},
-            timestamp=s.timestamp,
-        )
-        for s in db_sightings
-    ]
-    return response_data
+    return sightings

@@ -1,3 +1,5 @@
+# backend/app/schemas.py (CORRIGIDO)
+
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
@@ -6,15 +8,18 @@ from .models import UserRole
 # Schema para a câmera dentro da resposta de avistamento
 class CameraInSighting(BaseModel):
     name: str
+    class Config:
+        from_attributes = True
 
-# Schemas de Veículos (Sighting)
+# --- ALTERAÇÕES AQUI ---
 class VehicleSightingBase(BaseModel):
     license_plate: str
-    image_filename: str
-    camera_id: int
+    vehicle_color: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    image_path: Optional[str] = None
 
 class VehicleSightingCreate(VehicleSightingBase):
-    pass
+    camera_id: int
 
 class VehicleSighting(VehicleSightingBase):
     id: int
@@ -22,20 +27,26 @@ class VehicleSighting(VehicleSightingBase):
     class Config:
         from_attributes = True
 
-# --- NOVO SCHEMA PARA A RESPOSTA DO FRONTEND ---
+# Schema para a resposta no frontend, incluindo o nome da câmara
 class VehicleSightingResponse(BaseModel):
     id: int
-    plate: str
+    license_plate: str
+    vehicle_color: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    image_path: Optional[str] = None
     camera: CameraInSighting
     timestamp: datetime
+    class Config:
+        from_attributes = True
+# -----------------------
 
 # Schemas de Câmera
 class CameraBase(BaseModel):
     name: str
     rtsp_url: str
     is_active: bool = True
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class CameraCreate(CameraBase):
     pass
@@ -46,7 +57,6 @@ class CameraUpdate(BaseModel):
     is_active: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-
 
 class Camera(CameraBase):
     id: int
@@ -116,19 +126,25 @@ class DashboardStats(BaseModel):
     sightings_today: int
     alerts_24h: int
 
-# Schemas para Tickets
+# Schemas de Ticket
 class TicketBase(BaseModel):
     subject: str
     description: str
+    priority: str
 
 class TicketCreate(TicketBase):
     pass
+
+class TicketUpdate(BaseModel):
+    subject: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
 
 class Ticket(TicketBase):
     id: int
     owner_id: int
     status: str
     created_at: datetime
-
     class Config:
-        orm_mode = True
+        from_attributes = True

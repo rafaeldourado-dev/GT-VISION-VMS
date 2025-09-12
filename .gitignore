@@ -31,7 +31,7 @@ ai-processor/*.pyc
 ai-processor/.venv/
 ai-processor/venv/
 ai-processor/env/
-
+ai-processor/captures/
 # === Arquivos de Sistema Operacional e Editores ===
 # macOS
 .DS_Store
@@ -54,7 +54,8 @@ Desktop.ini
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
+.captures/
+__pypackages__/
 # === Docker ===
 # Não ignorar Dockerfile ou docker-compose.yml, apenas arquivos gerados
 docker-compose.override.yml

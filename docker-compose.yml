@@ -65,7 +65,6 @@ services:
       - ./ai-processor:/app
     env_file:
       - .env
-    # A seção 'environment' com o token JWT foi removida daqui
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -78,15 +77,16 @@ services:
   media-server:
     image: bluenviron/mediamtx:latest
     container_name: gt-vision-media-server
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
     ports:
       - "8554:8554"  # Porta para receber streams RTSP
-      - "8888:8888"  # Porta para servir streams HLS (para o navegador)
       - "1935:1935"  # Porta RTMP (opcional)
-    environment:
-      - MTX_PROTOCOLS=tcp
+      - "8889:8889"  # Porta para servir streams WebRTC
+      - "9997:9997"  # ADICIONADO: Porta da API para controle dinâmico
     networks:
       - gtv_network
-    restart: unless-stopped
 
 volumes:
   postgres_data:

@@ -1,0 +1,12 @@
+# Habilita a API para que o backend possa controlar o MediaMTX
+api: yes
+
+# Habilita o listener do WebRTC na porta 8889
+webrtcAddress: :8889
+
+# Permite que seu frontend (de qualquer origem) se conecte via WebRTC
+webrtcAllowOrigin: '*'
+
+# A seção 'paths' foi removida.
+# Todas as câmeras serão agora adicionadas dinamicamente através da API pelo seu backend.
+paths: {}
