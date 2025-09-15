@@ -13,16 +13,20 @@ COPY ./requirements.txt /app/requirements.txt
 # Instala as dependências do Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- CORREÇÃO AQUI: Copia o código da aplicação de forma explícita ---
+# --- Copia o código da aplicação de forma explícita ---
 COPY ./alembic.ini /app/alembic.ini
 COPY ./entrypoint.sh /app/entrypoint.sh
 COPY ./app /app/app
 COPY ./migrations /app/migrations
 
+# --- CORREÇÃO APLICADA AQUI ---
+# 1. Cria o diretório de capturas para que ele exista no container
+RUN mkdir -p /app/captures
+
 # Corrige o formato de quebra de linha do entrypoint
 RUN dos2unix /app/entrypoint.sh
 
-# Torna o script de entrypoint executável
+# 2. Torna o script de entrypoint executável (comentário corrigido para uma linha)
 RUN chmod +x /app/entrypoint.sh
 
 # Define o entrypoint

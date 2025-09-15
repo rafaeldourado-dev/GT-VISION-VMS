@@ -24,17 +24,15 @@ class APIClient:
         return False
 
     def get_cameras_from_api(self) -> List[Dict[str, Any]]:
-        # ALTERAÇÃO IMPORTANTE: Apontar para a nova rota interna
         internal_cameras_url = f"{self.base_url}/api/v1/internal/cameras"
         self.logger.info(f"A buscar câmaras do endpoint interno: {internal_cameras_url}")
         
         try:
             response = requests.get(internal_cameras_url, headers=self.headers)
             if response.status_code == 200:
-                self.logger.info(f"Encontradas {len(response.json())} câmaras para processar.")
                 return response.json()
-            elif response.status_code == 401:
-                self.logger.error("ERRO 401: A chave de API interna (ADMIN_API_KEY) é inválida. Verifique o ficheiro .env em ambos os serviços.")
+            elif response.status_code == 403:
+                self.logger.error("Erro de autenticação (403 Forbidden). Verifique se a ADMIN_API_KEY está correta e corresponde entre o .env do backend e o docker-compose do ai-processor.")
             else:
                 self.logger.error(f"Erro ao buscar câmaras. Status: {response.status_code}, Resposta: {response.text}")
         except requests.exceptions.RequestException as e:
@@ -42,20 +40,25 @@ class APIClient:
         return []
 
     def send_sighting_to_api(self, plate: str, image_filename: str, camera_id: int):
-        # A rota de avistamentos precisa ser protegida da mesma forma (assumindo que seja interna)
-        # Se for para utilizadores, a lógica terá de ser diferente. Por agora, vamos usar a chave de API.
-        sighting_url = f"{self.base_url}/api/v1/sightings/"
-        files = {'image_file': (os.path.basename(image_filename), open(image_filename, 'rb'), 'image/jpeg')}
-        data = {"plate": plate, "camera_id": camera_id}
+        # --- CORREÇÃO APLICADA AQUI ---
+        # O URL foi alterado para apontar para o endpoint interno correto.
+        sighting_url = f"{self.base_url}/api/v1/internal/sightings"
+        
+        # O backend não espera um ficheiro, apenas os dados em JSON.
+        # Se precisar de enviar a imagem, o backend teria de ser ajustado para recebê-la.
+        # Por agora, vamos enviar apenas os dados que o backend espera.
+        data = {
+            "license_plate": plate,
+            "camera_id": camera_id,
+            "image_path": os.path.basename(image_filename) # Enviamos o caminho da imagem como texto
+        }
         
         try:
-            response = requests.post(sighting_url, files=files, data=data, headers=self.headers)
+            # Enviamos os dados como JSON
+            response = requests.post(sighting_url, json=data, headers=self.headers)
             if response.status_code == 201:
                 self.logger.info(f"Avistamento da placa {plate} enviado com sucesso.")
             else:
                 self.logger.error(f"Falha ao enviar avistamento. Status: {response.status_code}, Resposta: {response.text}")
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Erro de conexão ao enviar avistamento: {e}")
-        finally:
-            if 'image_file' in files:
-                files['image_file'][1].close()

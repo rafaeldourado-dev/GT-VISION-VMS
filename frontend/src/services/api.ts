@@ -2,14 +2,13 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 
 const api = axios.create({
-  // Aponta para o endereço do backend que está a correr no Docker
   baseURL: 'http://127.0.0.1:8000/api/v1', 
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Interceptor para adicionar o token JWT em todas as requisições
+// Interceptors (código existente)
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('vms_token')
@@ -21,7 +20,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Interceptor para tratar erros de autenticação
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -54,7 +52,6 @@ export const authService = {
     return response.data
   },
   getMe: async () => {
-    // --- CORREÇÃO APLICADA AQUI ---
     const response = await api.get('/auth/users/me')
     return response.data
   },
@@ -71,6 +68,19 @@ export const cameraService = {
   },
   deleteCamera: async (cameraId: number) => {
     const response = await api.delete(`/cameras/${cameraId}`)
+    return response.data
+  },
+}
+
+// NOVO: Define o tipo para os filtros
+interface SightingFilters {
+  license_plate?: string;
+}
+
+export const sightingService = {
+  // ATUALIZADO: Função agora aceita filtros
+  getSightings: async (filters: SightingFilters = {}) => {
+    const response = await api.get('/sightings/', { params: filters })
     return response.data
   },
 }

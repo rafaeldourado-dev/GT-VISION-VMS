@@ -7,7 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Settings from './pages/Settings';
 import LandingPage from './pages/LandingPage';
 import Analytics from './pages/Analytics';
-import MapPage from './pages/MapPage'; // NOVO: Importar a página do mapa
+import DetectionsPage from './pages/DetectionsPage'; // Importe a nova página
 
 function App() {
   return (
@@ -27,7 +27,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/mapa" element={<ProtectedRoute><MapPage /></ProtectedRoute>} /> {/* NOVO: Rota para a página do mapa */}
+          {/* ROTA NOVA ADICIONADA AQUI */}
+          <Route path="/detections" element={<ProtectedRoute><DetectionsPage /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           

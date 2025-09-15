@@ -3,6 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime, time
 from typing import Optional, List
+from sqlalchemy.orm import selectinload # <--- 1. IMPORTE O SELECTINLOAD
 
 from . import models, schemas, security
 
@@ -61,13 +62,12 @@ async def get_cameras_by_client(db: AsyncSession, client_id: int, skip: int = 0,
     )
     return result.scalars().all()
 
-# --- ALTERAÇÃO AQUI para ser mais explícito ---
 async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int) -> models.Camera:
     """Cria uma nova câmera para um cliente de forma explícita."""
     db_camera = models.Camera(
         name=camera.name,
         rtsp_url=camera.rtsp_url,
-        is_active=camera.is_active, # Passa o valor diretamente
+        is_active=camera.is_active,
         latitude=camera.latitude,
         longitude=camera.longitude,
         client_id=client_id
@@ -76,7 +76,6 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     await db.commit()
     await db.refresh(db_camera)
     return db_camera
-# ---------------------------------------------
 
 async def delete_camera(db: AsyncSession, camera_id: int):
     camera = await get_camera_by_id(db, camera_id=camera_id)
@@ -110,6 +109,8 @@ async def get_sightings_by_client(
         select(models.VehicleSighting)
         .join(models.Camera)
         .filter(models.Camera.client_id == client_id)
+        # --- 2. ADICIONE ESTA LINHA PARA CARREGAR O RELACIONAMENTO ---
+        .options(selectinload(models.VehicleSighting.camera))
     )
 
     if license_plate:

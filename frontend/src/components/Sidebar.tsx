@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { LayoutDashboard, Map, Settings, BarChart3 } from 'lucide-react'; // Adicionado ícone do Mapa
+import { LayoutDashboard, Settings, BarChart3, Search } from 'lucide-react'; // Importe o ícone 'Search'
 import { motion } from 'framer-motion';
 
 const Sidebar: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    // { name: 'Mapa', href: '/mapa', icon: Map }, // NOVO: Link para a página do mapa
+    // NOVO ITEM DE MENU ADICIONADO AQUI
+    { name: 'Detecções', href: '/detections', icon: Search },
     { name: 'Analíticos', href: '/analytics', icon: BarChart3 },
   ];
 

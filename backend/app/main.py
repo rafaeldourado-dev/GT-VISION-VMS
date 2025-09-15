@@ -1,6 +1,9 @@
 import asyncio
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from .database import SessionLocal
 from . import models, schemas, crud
@@ -11,6 +14,17 @@ app = FastAPI(
     description="API para a plataforma de videomonitoramento inteligente GT-Vision.",
     version="2.0.0"
 )
+
+# --- CORREÇÃO ADICIONADA AQUI ---
+# Define o caminho para a diretoria de capturas
+CAPTURES_DIR = Path("captures")
+# Cria a diretoria se ela não existir
+os.makedirs(CAPTURES_DIR, exist_ok=True)
+# ---------------------------------
+
+# Monta a diretoria de ficheiros estáticos (agora com a certeza de que ela existe)
+app.mount(f"/{CAPTURES_DIR}", StaticFiles(directory=CAPTURES_DIR), name=str(CAPTURES_DIR))
+
 
 # Permite que o frontend (rodando em localhost:5173) aceda ao backend
 origins = [
