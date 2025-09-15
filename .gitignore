@@ -17,6 +17,7 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/coverage/
+frontend/.vite/
 
 # === Backend & AI-Processor (Python / FastAPI) ===
 backend/__pycache__/
