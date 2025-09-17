@@ -13,3 +13,4 @@ pika
 psycopg2-binary
 opencv-python-headless
 httpx
+websockets==11.0.3

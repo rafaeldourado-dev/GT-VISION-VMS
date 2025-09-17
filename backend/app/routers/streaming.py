@@ -1,6 +1,7 @@
 import asyncio
 import cv2
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Query
+import logging # Adicionado para melhor logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
 
@@ -69,10 +70,13 @@ async def websocket_stream(
         while True:
             success, frame = cap.read()
             if not success:
-                await asyncio.sleep(1)
+                # Lógica de reconexão
+                logging.warning(f"Falha ao ler o frame da câmara {camera_id}. Tentando reconectar...")
+                await asyncio.sleep(2)
                 cap.release()
                 cap = cv2.VideoCapture(camera.rtsp_url)
                 if not cap.isOpened():
+                    logging.error(f"Não foi possível reabrir o stream da câmara {camera_id}. Encerrando.")
                     break
                 continue
 
@@ -84,10 +88,19 @@ async def websocket_stream(
             await asyncio.sleep(1/30) # ~30 FPS
 
     except WebSocketDisconnect:
-        print(f"Cliente desconectado da câmara {camera_id}")
+        logging.info(f"Cliente desconectado da câmara {camera_id}")
     except Exception as e:
-        print(f"Erro no streaming da câmara {camera_id}: {e}")
+        logging.error(f"Erro inesperado no streaming da câmara {camera_id}: {e}")
     finally:
         cap.release()
-        if websocket.client_state.value != 3:
-             await websocket.close()
+        # --- CORREÇÃO APLICADA AQUI ---
+        # Tenta fechar a conexão de forma segura, ignorando o erro se ela já estiver fechada.
+        try:
+            await websocket.close()
+        except RuntimeError as e:
+            if 'Cannot call "send" once a close message has been sent.' in str(e):
+                logging.debug(f"Ignorando erro de fechamento para a câmara {camera_id}: Conexão já fechada.")
+                pass
+            else:
+                # Se for outro RuntimeError, é importante sabermos
+                raise

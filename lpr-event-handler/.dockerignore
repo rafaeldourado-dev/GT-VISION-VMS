@@ -1,0 +1,22 @@
+# Ignorar ficheiros e pastas do Git
+.git
+.gitignore
+
+# Ignorar ficheiros de configuração de editores
+.vscode/
+.idea/
+
+# Ignorar ficheiros de cache do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar ambientes virtuais
+.venv
+venv/
+env/
+
+# Ignorar ficheiros de sistema operacional
+.DS_Store
+Thumbs.db

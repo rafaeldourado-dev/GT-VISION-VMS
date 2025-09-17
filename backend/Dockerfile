@@ -26,7 +26,7 @@ RUN mkdir -p /app/captures
 # Corrige o formato de quebra de linha do entrypoint
 RUN dos2unix /app/entrypoint.sh
 
-# 2. Torna o script de entrypoint executável (comentário corrigido para uma linha)
+# 2. Torna o script de entrypoint executável
 RUN chmod +x /app/entrypoint.sh
 
 # Define o entrypoint
