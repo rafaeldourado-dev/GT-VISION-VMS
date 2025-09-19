@@ -203,4 +203,5 @@ async def delete_ticket(db: AsyncSession, ticket_id: int) -> Optional[models.Tic
         await db.delete(ticket)
         await db.commit()
     return ticket
+
 # endregion
