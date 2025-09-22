@@ -15,22 +15,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Copia o código da aplicação de forma explícita ---
 COPY ./alembic.ini /app/alembic.ini
-COPY ./entrypoint.sh /app/entrypoint.sh
 COPY ./app /app/app
 COPY ./migrations /app/migrations
 
 # --- CORREÇÃO APLICADA AQUI ---
-# 1. Cria o diretório de capturas para que ele exista no container
+# Copia o script de entrypoint e JÁ APLICA AS PERMISSÕES E CORREÇÕES
+COPY ./entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh      # 1. Torna o script executável
+RUN dos2unix /app/entrypoint.sh      # 2. Corrige o formato de quebra de linha
+
+# Cria o diretório de capturas para que ele exista no container
 RUN mkdir -p /app/captures
 
-# Corrige o formato de quebra de linha do entrypoint
-RUN dos2unix /app/entrypoint.sh
-
-# 2. Torna o script de entrypoint executável
-RUN chmod +x /app/entrypoint.sh
-
-# Define o entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
-
-# O comando a ser executado pelo entrypoint (CMD)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# A instrução para iniciar o container (ENTRYPOINT ou CMD) deve vir por último.
+# Se seu entrypoint.sh já está no repositório, garanta que essa linha exista no final.
+# ENTRYPOINT ["/app/entrypoint.sh"]
