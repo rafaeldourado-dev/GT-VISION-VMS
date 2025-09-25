@@ -1,32 +1,37 @@
-# Use a imagem base apropriada para sua aplicação (ex: python:3.10-slim)
+# backend/Dockerfile
+
+# Use an official Python runtime as a parent image
 FROM python:3.10-slim
 
-# Instala o cliente do PostgreSQL, dos2unix e o curl para o healthcheck
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y postgresql-client dos2unix curl && rm -rf /var/lib/apt/lists/*
 
-# Define o diretório de trabalho no contêiner
+# Set the working directory in the container
 WORKDIR /app
 
-# Copia os arquivos de dependências primeiro para aproveitar o cache
+# Copy the requirements file and install dependencies
 COPY ./requirements.txt /app/requirements.txt
-
-# Instala as dependências do Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Copia o código da aplicação de forma explícita ---
+# Copy the rest of the application code
 COPY ./alembic.ini /app/alembic.ini
 COPY ./app /app/app
 COPY ./migrations /app/migrations
-
-# --- CORREÇÃO APLICADA AQUI ---
-# Copia o script de entrypoint e JÁ APLICA AS PERMISSÕES E CORREÇÕES
 COPY ./entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh      # 1. Torna o script executável
-RUN dos2unix /app/entrypoint.sh      # 2. Corrige o formato de quebra de linha
 
-# Cria o diretório de capturas para que ele exista no container
+# --- CORREÇÃO AQUI ---
+# 1. Torna o script executável
+RUN chmod +x /app/entrypoint.sh
+# 2. Corrige o formato de quebra de linha (bom para evitar problemas entre Windows/Linux)
+RUN dos2unix /app/entrypoint.sh
+# --------------------
+
+# Cria a diretoria para capturas
 RUN mkdir -p /app/captures
 
-# A instrução para iniciar o container (ENTRYPOINT ou CMD) deve vir por último.
-# Se seu entrypoint.sh já está no repositório, garanta que essa linha exista no final.
-# ENTRYPOINT ["/app/entrypoint.sh"]
+# The command to run the application
+CMD ["/app/entrypoint.sh"]

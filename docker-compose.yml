@@ -29,14 +29,15 @@ services:
       - gtv_network
     restart: unless-stopped
     healthcheck:
-        test: ["CMD", "rabbitmq-diagnostics", "ping"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
     container_name: gt-vision-backend
+    # entrypoint: ["tail", "-f", "/dev/null"]
     volumes:
       - ./backend:/app
     ports:
@@ -81,10 +82,10 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     ports:
-      - "8554:8554"  # Porta para receber streams RTSP
-      - "1935:1935"  # Porta RTMP (opcional)
-      - "8889:8889"  # Porta para servir streams WebRTC
-      - "9997:9997"  # ADICIONADO: Porta da API para controle dinâmico
+      - "8554:8554"   # Porta para receber streams RTSP
+      - "1935:1935"   # Porta RTMP (opcional)
+      - "8889:8889"   # Porta para servir streams WebRTC
+      - "9997:9997"   # ADICIONADO: Porta da API para controle dinâmico
     networks:
       - gtv_network
 
