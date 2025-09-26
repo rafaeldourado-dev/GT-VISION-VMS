@@ -1,0 +1,40 @@
+name: CI - Build Docker Images
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_images:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- CORREÇÃO ADICIONADA AQUI ---
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: gt-vision/backend:latest
+
+      - name: Build ai-processor image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ai-processor
+          file: ./ai-processor/Dockerfile
+          push: false
+          tags: gt-vision/ai-processor:latest

@@ -1,0 +1,21 @@
+# Ignora as dependências do Node.js, que devem ser instaladas dentro do contêiner
+node_modules
+
+# Ignora os arquivos de build, pois o Dockerfile irá gerá-los
+dist
+build
+
+# Ignora arquivos de ambiente locais
+.env
+.env.local
+.env.*.local
+
+# Ignora logs e cache
+npm-debug.log*
+yarn-debug.log*
+.vite
+
+# Ignora arquivos de configuração de IDE e sistema operacional
+.vscode
+.idea
+.DS_Store

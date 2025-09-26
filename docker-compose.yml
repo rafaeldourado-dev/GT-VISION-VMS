@@ -29,16 +29,16 @@ services:
       - gtv_network
     restart: unless-stopped
     healthcheck:
-        test: ["CMD", "rabbitmq-diagnostics", "ping"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
     container_name: gt-vision-backend
     volumes:
-      - ./backend:/app
+      - ./backend/app:/app/app
     ports:
       - "8000:8000"
     env_file:
@@ -81,12 +81,25 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     ports:
-      - "8554:8554"  # Porta para receber streams RTSP
-      - "1935:1935"  # Porta RTMP (opcional)
-      - "8889:8889"  # Porta para servir streams WebRTC
-      - "9997:9997"  # ADICIONADO: Porta da API para controle dinâmico
+      - "8554:8554"   # RTSP
+      - "1935:1935"   # RTMP
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # API
     networks:
       - gtv_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gt-vision-frontend
+    ports:
+      - "5173:80" # Expõe a porta 80 do Nginx para 5173 na sua máquina
+    networks:
+      - gtv_network
+    restart: unless-stopped
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

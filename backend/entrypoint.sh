@@ -17,4 +17,5 @@ alembic upgrade head
 
 # --- CORREÇÃO AQUI ---
 # Inicia a aplicação com a flag --reload para desenvolvimento
+echo "Starting Uvicorn server..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
