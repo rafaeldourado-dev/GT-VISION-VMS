@@ -11,11 +11,14 @@ interface User {
   role: string
 }
 
+// ATUALIZADO: Adicionamos 'setToken' e 'isAuthChecked' à interface
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  isAuthChecked: boolean
+  setToken: (token: string) => void
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   checkAuth: () => Promise<void>
@@ -23,76 +26,86 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  token: localStorage.getItem('vms_token'),
-  isAuthenticated: !!localStorage.getItem('vms_token'),
+  token: null,
+  isAuthenticated: false,
   isLoading: false,
+  isAuthChecked: false,
+
+  // NOVA FUNÇÃO: Implementação do setToken
+  setToken: (token: string) => {
+    set({ token, isAuthenticated: !!token });
+  },
 
   login: async (email: string, password: string) => {
-    set({ isLoading: true })
+    set({ isLoading: true });
     try {
-      const response = await authService.login(email, password)
-      const { access_token } = response
-
-      localStorage.setItem('vms_token', access_token)
+      const response = await authService.login(email, password);
+      const { access_token } = response;
       
-      // Define o token no estado antes de chamar getMe
-      set({ token: access_token })
+      // CORREÇÃO: Passamos o 'access_token' para a função getMe
+      const userData = await authService.getMe(access_token);
 
-      const userData = await authService.getMe()
-
+      // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
       set({
         user: userData,
+        token: access_token,
         isAuthenticated: true,
         isLoading: false,
-      })
+        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
+      });
 
-      toast.success('Login realizado com sucesso!')
-      return true
+      toast.success('Login realizado com sucesso!');
+      return true;
     } catch (error: any) {
-      set({ isLoading: false })
+      // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
+      set({ 
+        isLoading: false, 
+        token: null, 
+        isAuthenticated: false,
+        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
+      });
       if (error.response?.status === 401 || error.response?.status === 400) {
-        toast.error('Email ou senha incorretos.')
+        toast.error('Email ou senha incorretos.');
       } else {
-        toast.error('Erro ao fazer login. Tente novamente.')
+        toast.error('Erro ao fazer login. Tente novamente.');
       }
-      return false
+      return false;
     }
   },
 
   logout: () => {
-    localStorage.removeItem('vms_token')
-    set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-    })
-    // Redireciona para a página de login para uma experiência mais fluida
-    window.location.href = '/login'
-    toast.success('Logout realizado com sucesso!')
+    // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
+    set({ 
+        user: null, 
+        token: null, 
+        isAuthenticated: false,
+        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
+    });
+    window.location.href = '/login';
+    toast.success('Logout realizado com sucesso!');
   },
 
   checkAuth: async () => {
-    const token = localStorage.getItem('vms_token')
-    if (!token) {
-      set({ isAuthenticated: false, user: null, token: null })
-      return
-    }
-
     try {
-      const userData = await authService.getMe()
+      const response = await authService.refreshToken();
+      const { access_token } = response;
+      
+      // CORREÇÃO: Passamos o 'access_token' para a função getMe
+      const userData = await authService.getMe(access_token);
+      
       set({
         user: userData,
-        token,
+        token: access_token,
         isAuthenticated: true,
-      })
+        isAuthChecked: true,
+      });
     } catch (error) {
-      // Se o token for inválido, limpa tudo
-      localStorage.removeItem('vms_token')
       set({
         user: null,
         token: null,
         isAuthenticated: false,
-      })
+        isAuthChecked: true,
+      });
     }
   },
-}))
+}));
