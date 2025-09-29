@@ -33,6 +33,7 @@ ai-processor/.venv/
 ai-processor/venv/
 ai-processor/env/
 ai-processor/captures/
+ai-processor/pending-training/
 # === Arquivos de Sistema Operacional e Editores ===
 # macOS
 .DS_Store

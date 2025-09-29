@@ -59,4 +59,10 @@ async def delete_camera(
         raise HTTPException(status_code=404, detail="Câmera não encontrada")
     
     await crud.delete_camera(db, camera_id=camera_id, client_id=current_user.client_id, redis_client=redis_client) # NOVO: Passa o cliente Redis e client_id
+    
+    # --- CORREÇÃO AQUI ---
+    # Adiciona a linha que faltava para salvar a alteração no banco de dados
+    await db.commit()
+    # ---------------------
+    
     return None
