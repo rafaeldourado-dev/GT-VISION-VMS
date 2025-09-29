@@ -3,8 +3,11 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime, time
 from typing import Optional, List
-from sqlalchemy.orm import selectinload # <--- 1. IMPORTE O SELECTINLOAD
+from sqlalchemy.orm import selectinload
+import json # NOVO: Para serializar/desserializar dados de/para Redis
+import redis.asyncio as redis # NOVO: Importa o cliente Redis assíncrono
 
+from .config import settings # CORRIGIDO: De ..config para .config
 from . import models, schemas, security
 
 # region CRUD Client (Organização)
@@ -62,8 +65,8 @@ async def get_cameras_by_client(db: AsyncSession, client_id: int, skip: int = 0,
     )
     return result.scalars().all()
 
-async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int) -> models.Camera:
-    """Cria uma nova câmera para um cliente de forma explícita."""
+async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int, redis_client: redis.Redis) -> models.Camera:
+    """Cria uma nova câmera para um cliente de forma explícita e invalida o cache de estatísticas."""
     db_camera = models.Camera(
         name=camera.name,
         rtsp_url=camera.rtsp_url,
@@ -75,13 +78,24 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     db.add(db_camera)
     await db.commit()
     await db.refresh(db_camera)
+
+    # NOVO: Invalidação do Cache-Aside (Write-Through)
+    cache_key = f"dashboard_stats:{client_id}"
+    await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+
     return db_camera
 
-async def delete_camera(db: AsyncSession, camera_id: int):
+async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_client: redis.Redis):
+    """Apaga uma câmera e invalida o cache de estatísticas."""
     camera = await get_camera_by_id(db, camera_id=camera_id)
     if camera:
         await db.delete(camera)
         await db.commit()
+        
+        # NOVO: Invalidação do Cache-Aside (Write-Through)
+        cache_key = f"dashboard_stats:{client_id}"
+        await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+
     return camera
 # endregion
 
@@ -109,7 +123,6 @@ async def get_sightings_by_client(
         select(models.VehicleSighting)
         .join(models.Camera)
         .filter(models.Camera.client_id == client_id)
-        # --- 2. ADICIONE ESTA LINHA PARA CARREGAR O RELACIONAMENTO ---
         .options(selectinload(models.VehicleSighting.camera))
     )
 
@@ -137,7 +150,22 @@ async def create_lead(db: AsyncSession, lead: schemas.LeadCreate) -> models.Lead
 # endregion
 
 # region Dashboard Stats
-async def get_dashboard_stats(db: AsyncSession, client_id: int) -> dict:
+async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: redis.Redis) -> dict:
+    """
+    Busca estatísticas do dashboard, implementando o padrão Cache-Aside.
+    """
+    cache_key = f"dashboard_stats:{client_id}"
+
+    # 1. Tentar ler no Cache (Cache-Aside Read)
+    cached_data = await redis_client.get(cache_key)
+    if cached_data:
+        try:
+            return json.loads(cached_data) # Cache Hit
+        except json.JSONDecodeError:
+            # Em caso de erro de desserialização, continuar para o DB
+            pass
+
+    # 2. Se falhar (Cache Miss), consultar o DB
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
 
     total_cameras_query = select(func.count(models.Camera.id)).filter(models.Camera.client_id == client_id)
@@ -157,12 +185,21 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int) -> dict:
     total_sightings_today_result = await db.execute(total_sightings_today_query)
     total_sightings_today = total_sightings_today_result.scalar_one()
 
-    return {
+    stats = {
         "total_cameras": total_cameras,
         "online_cameras": active_cameras,
         "sightings_today": total_sightings_today,
         "alerts_24h": 0,
     }
+
+    # 3. Gravar no Cache antes de retornar
+    await redis_client.set(
+        cache_key,
+        json.dumps(stats),
+        ex=settings.REDIS_CACHE_TTL_SECONDS # Define o TTL do cache
+    )
+
+    return stats
 # endregion
 
 # region CRUD Ticket

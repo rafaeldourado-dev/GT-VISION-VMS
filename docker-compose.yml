@@ -34,11 +34,26 @@ services:
       timeout: 5s
       retries: 5
 
+  redis: # NOVO SERVIÇO DE CACHE
+    image: redis:7-alpine
+    container_name: gt-vision-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - gtv_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     container_name: gt-vision-backend
     volumes:
       - ./backend/app:/app/app
+      - ./ai-processor/captures:/app/captures # CORRIGIDO: Compartilha a pasta de capturas do AI-Processor
     ports:
       - "8000:8000"
     env_file:
@@ -47,6 +62,8 @@ services:
       db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis: # NOVO: Dependência do Redis
         condition: service_healthy
     networks:
       - gtv_network

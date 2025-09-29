@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_PORT: int = 5432
 
+    # NOVO: Configurações do Redis
+    REDIS_HOST: str
+    REDIS_PORT: int = 6379
+    REDIS_CACHE_TTL_SECONDS: int = 300 # Padrão de 5 minutos
+
     @property
     def DATABASE_URL(self) -> str:
         return str(

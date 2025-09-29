@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis # NOVO: Importa o cliente Redis assíncrono
 
 # Estas são as importações corretas que o arquivo precisa
 from . import crud, schemas, models
@@ -11,6 +12,21 @@ from .database import SessionLocal
 from .config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token") # Corrigido para o URL completo do token
+
+# NOVO: Instância global do cliente Redis assíncrono (reutilizável)
+redis_client = redis.Redis(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    decode_responses=True # Decodifica automaticamente a resposta para string
+)
+
+async def get_redis_client() -> AsyncGenerator[redis.Redis, None]:
+    """Dependência que fornece a instância do cliente Redis."""
+    try:
+        yield redis_client
+    finally:
+        # A instância global não é fechada aqui para reutilização
+        pass
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as db:
