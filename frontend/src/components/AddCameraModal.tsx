@@ -24,23 +24,24 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ isOpen, onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !rtspUrl.trim()) return
+    if (!name.trim() || !rtspUrl.trim()) return;
 
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     const cameraData = {
       name: name.trim(),
       rtsp_url: rtspUrl.trim(),
-      latitude: latitude ? parseFloat(latitude) : undefined,
-      longitude: longitude ? parseFloat(longitude) : undefined,
-    }
-    const success = await addCamera(cameraData)
-    setIsSubmitting(false)
+      // CORREÇÃO APLICADA AQUI
+      latitude: latitude ? parseFloat(latitude) : null,
+      longitude: longitude ? parseFloat(longitude) : null,
+    };
+    const success = await addCamera(cameraData);
+    setIsSubmitting(false);
 
     if (success) {
-      clearForm()
-      onClose()
+      clearForm();
+      onClose();
     }
-  }
+  };
   
   const handleClose = () => {
     clearForm()

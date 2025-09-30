@@ -4,10 +4,10 @@ from sqlalchemy import func
 from datetime import datetime, time
 from typing import Optional, List
 from sqlalchemy.orm import selectinload
-import json # NOVO: Para serializar/desserializar dados de/para Redis
-import redis.asyncio as redis # NOVO: Importa o cliente Redis assíncrono
+import json
+import redis.asyncio as redis
 
-from .config import settings # CORRIGIDO: De ..config para .config
+from .config import settings
 from . import models, schemas, security
 
 # region CRUD Client (Organização)
@@ -78,11 +78,8 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     db.add(db_camera)
     await db.commit()
     await db.refresh(db_camera)
-
-    # NOVO: Invalidação do Cache-Aside (Write-Through)
     cache_key = f"dashboard_stats:{client_id}"
-    await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
-
+    await redis_client.delete(cache_key)
     return db_camera
 
 async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_client: redis.Redis):
@@ -91,21 +88,45 @@ async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_
     if camera:
         await db.delete(camera)
         await db.commit()
-        
-        # NOVO: Invalidação do Cache-Aside (Write-Through)
         cache_key = f"dashboard_stats:{client_id}"
-        await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
-
+        await redis_client.delete(cache_key)
     return camera
 # endregion
 
 # region CRUD VehicleSighting
-async def create_vehicle_sighting(db: AsyncSession, sighting: schemas.VehicleSightingCreate) -> models.VehicleSighting:
-    db_sighting = models.VehicleSighting(**sighting.dict())
+async def create_vehicle_sighting(
+    db: AsyncSession,
+    sighting: schemas.VehicleSightingCreate,
+    camera_id: Optional[int] = None
+) -> models.VehicleSighting:
+    """
+    Cria um novo avistamento.
+    Esta função unificada funciona tanto para o 'coletor' (que passa camera_id como argumento)
+    quanto para o 'internal' (que passa camera_id dentro do schema).
+    """
+    # 1. Determina o ID da câmera
+    final_camera_id = camera_id if camera_id is not None else sighting.camera_id
+    if final_camera_id is None:
+        raise ValueError("O ID da câmera é obrigatório para criar um avistamento.")
+
+    # 2. Prepara os dados do schema, removendo o camera_id opcional
+    sighting_data = sighting.dict(exclude={"camera_id"})
+
+    # 3. Mapeia o campo do schema (plate_image_url) para o do modelo (image_path)
+    if 'plate_image_url' in sighting_data:
+        sighting_data['image_path'] = sighting_data.pop('plate_image_url')
+
+    # 4. Cria a instância do modelo com todos os dados corretos
+    db_sighting = models.VehicleSighting(
+        **sighting_data,
+        camera_id=final_camera_id
+    )
+    
     db.add(db_sighting)
     await db.commit()
     await db.refresh(db_sighting)
     return db_sighting
+
 
 async def get_sightings_by_client(
     db: AsyncSession, 
@@ -155,17 +176,13 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
     Busca estatísticas do dashboard, implementando o padrão Cache-Aside.
     """
     cache_key = f"dashboard_stats:{client_id}"
-
-    # 1. Tentar ler no Cache (Cache-Aside Read)
     cached_data = await redis_client.get(cache_key)
     if cached_data:
         try:
-            return json.loads(cached_data) # Cache Hit
+            return json.loads(cached_data)
         except json.JSONDecodeError:
-            # Em caso de erro de desserialização, continuar para o DB
             pass
 
-    # 2. Se falhar (Cache Miss), consultar o DB
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
 
     total_cameras_query = select(func.count(models.Camera.id)).filter(models.Camera.client_id == client_id)
@@ -192,13 +209,11 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
         "alerts_24h": 0,
     }
 
-    # 3. Gravar no Cache antes de retornar
     await redis_client.set(
         cache_key,
         json.dumps(stats),
-        ex=settings.REDIS_CACHE_TTL_SECONDS # Define o TTL do cache
+        ex=settings.REDIS_CACHE_TTL_SECONDS
     )
-
     return stats
 # endregion
 
@@ -240,4 +255,4 @@ async def delete_ticket(db: AsyncSession, ticket_id: int) -> Optional[models.Tic
         await db.delete(ticket)
         await db.commit()
     return ticket
-# endregion
+# endregion 

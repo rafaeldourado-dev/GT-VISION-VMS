@@ -1,5 +1,3 @@
-# backend/app/schemas.py (CORRIGIDO)
-
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
@@ -11,15 +9,19 @@ class CameraInSighting(BaseModel):
     class Config:
         from_attributes = True
 
-# --- ALTERAÇÕES AQUI ---
+# --- Schemas de Avistamento ---
 class VehicleSightingBase(BaseModel):
     license_plate: str
     vehicle_color: Optional[str] = None
     vehicle_model: Optional[str] = None
-    image_path: Optional[str] = None
+    # Renomeando 'image_path' para ser mais específico sobre o recorte
+    plate_image_url: Optional[str] = None
 
 class VehicleSightingCreate(VehicleSightingBase):
-    camera_id: int
+    # <<< MUDANÇA IMPORTANTE AQUI >>>
+    # camera_id é agora opcional. O coletor o envia separadamente.
+    # A sua função CRUD deve ser inteligente o suficiente para lidar com isso.
+    camera_id: Optional[int] = None
 
 class VehicleSighting(VehicleSightingBase):
     id: int
@@ -27,20 +29,28 @@ class VehicleSighting(VehicleSightingBase):
     class Config:
         from_attributes = True
 
-# Schema para a resposta no frontend, incluindo o nome da câmara
 class VehicleSightingResponse(BaseModel):
     id: int
     license_plate: str
     vehicle_color: Optional[str] = None
     vehicle_model: Optional[str] = None
-    image_path: Optional[str] = None
+    plate_image_url: Optional[str] = None # Campo atualizado
     camera: CameraInSighting
     timestamp: datetime
     class Config:
         from_attributes = True
-# -----------------------
 
-# Schemas de Câmera
+# --- Schemas de Câmera (COM ONVIF) ---
+class CameraCreateOnvif(BaseModel):
+    name: str
+    ip_address: str
+    port: int = 80
+    username: str
+    password: str
+    is_active: bool = True
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 class CameraBase(BaseModel):
     name: str
     rtsp_url: str
@@ -64,7 +74,7 @@ class Camera(CameraBase):
     class Config:
         from_attributes = True
 
-# Schemas de Usuário
+# --- Schemas de Usuário ---
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
@@ -82,7 +92,7 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
-# Schemas de Cliente
+# --- Schemas de Cliente ---
 class ClientBase(BaseModel):
     name: str
 
@@ -95,7 +105,7 @@ class Client(ClientBase):
     class Config:
         from_attributes = True
 
-# Schemas de Lead (CRM)
+# --- Schemas de Lead (CRM) ---
 class LeadBase(BaseModel):
     name: str
     email: EmailStr
@@ -111,7 +121,7 @@ class Lead(LeadBase):
     class Config:
         from_attributes = True
 
-# Schemas de Autenticação
+# --- Schemas de Autenticação ---
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -119,14 +129,14 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
-# Schemas de Dashboard
+# --- Schemas de Dashboard ---
 class DashboardStats(BaseModel):
     total_cameras: int
     online_cameras: int
     sightings_today: int
     alerts_24h: int
 
-# Schemas de Ticket
+# --- Schemas de Ticket ---
 class TicketBase(BaseModel):
     subject: str
     description: str

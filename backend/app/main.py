@@ -7,7 +7,7 @@ from starlette.staticfiles import StaticFiles
 
 from .database import SessionLocal
 from . import models, schemas, crud
-from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming
+from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming, coletor
 
 app = FastAPI(
     title="GT-Vision API",
@@ -15,15 +15,14 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# --- CORREÇÃO ADICIONADA AQUI ---
-# Define o caminho para a diretoria de capturas
-CAPTURES_DIR = Path("captures")
-# Cria a diretoria se ela não existir
+# --- DIRETÓRIO DE CAPTURAS E ARQUIVOS ESTÁTICOS ---
+# Usar um caminho absoluto é mais seguro em ambientes de container
+CAPTURES_DIR = "/app/captures"
 os.makedirs(CAPTURES_DIR, exist_ok=True)
-# ---------------------------------
 
-# Monta a diretoria de ficheiros estáticos (agora com a certeza de que ela existe)
-app.mount(f"/{CAPTURES_DIR}", StaticFiles(directory=CAPTURES_DIR), name=str(CAPTURES_DIR))
+# Monta a rota '/api/v1/captures' para servir os recortes das placas.
+# O frontend poderá aceder às imagens em: http://seu-dominio/api/v1/captures/nome_do_ficheiro.jpg
+app.mount("/api/v1/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 
 
 # Permite que o frontend (rodando em localhost:5173) aceda ao backend
@@ -83,6 +82,7 @@ app.include_router(cameras.router, prefix="/api/v1", tags=["Câmeras"])
 app.include_router(crm.router, prefix="/api/v1", tags=["CRM"])
 app.include_router(tickets.router, prefix="/api/v1", tags=["Tickets"])
 app.include_router(internal.router, prefix="/api/v1", tags=["Internal API"])
+app.include_router(coletor.router, prefix="/api/v1", tags=["Coletor de Eventos"])
 
 # A rota de streaming fica na raiz /ws
 app.include_router(streaming.router)

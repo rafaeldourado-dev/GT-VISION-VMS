@@ -11,5 +11,6 @@ pyyaml>=5.1
 tqdm
 rich
 websockets
+sqlalchemy
 # Adiciona a instalação da biblioteca local a partir da pasta
 ./fast-plate-ocr-master[onnx]

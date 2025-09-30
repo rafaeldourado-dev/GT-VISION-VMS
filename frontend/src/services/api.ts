@@ -1,5 +1,4 @@
 import axios from 'axios';
-import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores/authStore';
 
 const api = axios.create({
@@ -33,7 +32,6 @@ api.interceptors.response.use(
         const response = await api.post('/auth/refresh-token'); 
         const { access_token } = response.data;
         
-        // CORREÇÃO: Esta chamada agora funciona porque 'setToken' existe no authStore
         useAuthStore.getState().setToken(access_token);
         
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
@@ -64,7 +62,6 @@ export const authService = {
     });
     return response.data;
   },
-  // CORREÇÃO: A função agora aceita um argumento 'token'
   getMe: async (token: string) => {
     const response = await api.get('/auth/users/me', {
       headers: { Authorization: `Bearer ${token}` }
@@ -83,7 +80,8 @@ export const cameraService = {
     return response.data;
   },
   createCamera: async (cameraData: NewCameraData) => {
-    const response = await api.post('/cameras', cameraData);
+    // CORREÇÃO APLICADA AQUI
+    const response = await api.post('/cameras/', cameraData);
     return response.data;
   },
   deleteCamera: async (cameraId: number) => {
