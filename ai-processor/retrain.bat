@@ -19,7 +19,7 @@ python %PROJECT_DIR%\collector.py
 cd %PROJECT_DIR%\fast-plate-ocr-master
 
 :: Passo 3: Define o backend do Keras
-set KERAS_BACKEND=tensorflow
+set KERAS_BACKEND=tensorflow 
 
 :: Passo 4: Inicia o treinamento
 echo.

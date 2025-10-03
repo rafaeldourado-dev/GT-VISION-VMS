@@ -80,6 +80,8 @@ services:
     container_name: gt-vision-ai-processor
     volumes:
       - ./ai-processor:/app
+    ports:
+      - "5000:5000" # <-- ALTERAÇÃO ADICIONADA AQUI
     env_file:
       - .env
     depends_on:
@@ -117,6 +119,16 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+
+  cloudflared-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: gt-vision-tunnel
+    restart: unless-stopped
+    depends_on:
+      - ai-processor
+    networks:
+      - gtv_network
+    command: tunnel --no-autoupdate run --token eyJhIjoiY2JjZTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnblMzYiLCJ0IjoiNjQ0ZTRhNTgtNjk0NC00NGQxLTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnbEVTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnbNVGN0Tm1GbU9UWmhNRFV6TXpVeCJ9
 
 volumes:
   postgres_data:

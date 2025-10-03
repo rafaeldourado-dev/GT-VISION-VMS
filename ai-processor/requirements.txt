@@ -12,5 +12,6 @@ tqdm
 rich
 websockets
 sqlalchemy
+Flask
 # Adiciona a instalação da biblioteca local a partir da pasta
 ./fast-plate-ocr-master[onnx]
