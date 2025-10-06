@@ -1,3 +1,4 @@
+# backend/app/models.py
 import enum
 from datetime import datetime
 from sqlalchemy import (
@@ -19,6 +20,11 @@ class UserRole(enum.Enum):
     ADMIN = "admin"
     CLIENT_ADMIN = "client_admin"
     CLIENT_USER = "client_user"
+
+# --- NOVO: Enumeração para os tipos de câmera ---
+class CameraType(enum.Enum):
+    GENERIC_RTSP = "generic_rtsp"
+    INTELBRAS_PUSH = "intelbras_push"
 
 # Modelos de Banco de Dados
 class Client(Base):
@@ -50,6 +56,11 @@ class Camera(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     rtsp_url = Column(String, unique=True, index=True, nullable=False)
+    
+    # --- CAMPO ADICIONADO ---
+    camera_type = Column(SQLAlchemyEnum(CameraType), default=CameraType.GENERIC_RTSP, nullable=False)
+    # --------------------------
+
     is_active = Column(Boolean, default=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -68,7 +79,6 @@ class VehicleSighting(Base):
     vehicle_color = Column(String, index=True, nullable=True)
     vehicle_model = Column(String, index=True, nullable=True)
     
-    # Este é o campo que usaremos para o recorte da placa
     image_path = Column(String, nullable=True) 
 
     camera_id = Column(Integer, ForeignKey("cameras.id"))

@@ -1,16 +1,79 @@
+version: '3.8'
+
 services:
+  # 1. NGINX: O único ponto de entrada para sua aplicação.
+  nginx:
+    image: nginx:alpine
+    container_name: gt-vision-nginx
+    restart: unless-stopped
+    ports:
+      # Expõe a porta 80 (HTTP) e 443 (HTTPS) do seu servidor.
+      # Você precisará configurar o HTTPS no Nginx posteriormente.
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Mapeia o arquivo de configuração do Nginx.
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      # Adicione volumes para certificados SSL/TLS quando for configurar HTTPS.
+      # - ./nginx/certs:/etc/nginx/certs
+    networks:
+      - gtv_network
+    depends_on:
+      - frontend
+      - backend
+
+  # 2. FRONTEND: Nenhuma porta exposta. O Nginx se comunica com ele. 
+  frontend:
+    build: ./frontend
+    container_name: gt-vision-frontend
+    restart: unless-stopped
+    networks:
+      - gtv_network
+    depends_on:
+      - backend
+
+  # 3. BACKEND: Nenhuma porta exposta. O Nginx se comunica com ele.
+  backend:
+    build: ./backend
+    container_name: gt-vision-backend
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - ./ai-processor/captures:/app/captures
+    env_file:
+      - .env
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Adicionamos a variável de ambiente para o CORS diretamente aqui.
+    # Isso garante que o backend sempre permita o acesso do seu domínio.
+    environment:
+      - BACKEND_CORS_ORIGINS='["http://gtvision.site", "https://gtvision.site", "http://www.gtvision.site", "https://www.gtvision.site"]'
+    networks:
+      - gtv_network
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 4. SERVIÇOS DE INFRAESTRUTURA
   db:
     image: postgres:13-alpine
     container_name: gt-vision-db
+    restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     env_file:
       - .env
-    ports:
-      - "5432:5432"
     networks:
       - gtv_network
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -20,78 +83,69 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: gt-vision-rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    env_file:
-      - .env
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
     networks:
       - gtv_network
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  redis: # NOVO SERVIÇO DE CACHE
+  redis:
     image: redis:7-alpine
     container_name: gt-vision-redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     networks:
       - gtv_network
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  backend:
-    build: ./backend
-    container_name: gt-vision-backend
-    volumes:
-      - ./backend/app:/app/app
-      - ./ai-processor/captures:/app/captures # CORRIGIDO: Compartilha a pasta de capturas do AI-Processor
-    ports:
-      - "8000:8000"
+  # 5. OUTROS SERVIÇOS DA APLICAÇÃO
+  event-listener:
+    build: ./event-listener
+    container_name: gt-vision-event-listener
+    restart: unless-stopped
     env_file:
       - .env
+    networks:
+      - gtv_network
     depends_on:
-      db:
+      backend:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      redis: # NOVO: Dependência do Redis
-        condition: service_healthy
-    networks:
-      - gtv_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   ai-processor:
     build: ./ai-processor
     container_name: gt-vision-ai-processor
+    restart: unless-stopped
     volumes:
       - ./ai-processor:/app
-    ports:
-      - "5000:5000" # <-- ALTERAÇÃO ADICIONADA AQUI
     env_file:
       - .env
+    networks:
+      - gtv_network
     depends_on:
       rabbitmq:
         condition: service_healthy
       backend:
         condition: service_healthy
+
+  intelbras-event-receiver:
+    build: ./intelbras-event-receiver
+    container_name: gt-vision-intelbras-event-receiver
+    restart: unless-stopped
+    env_file:
+      - .env
     networks:
       - gtv_network
-    restart: unless-stopped
 
   media-server:
     image: bluenviron/mediamtx:latest
@@ -99,36 +153,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
-    ports:
-      - "8554:8554"   # RTSP
-      - "1935:1935"   # RTMP
-      - "8889:8889"   # WebRTC
-      - "9997:9997"   # API
     networks:
       - gtv_network
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: gt-vision-frontend
-    ports:
-      - "5173:80" # Expõe a porta 80 do Nginx para 5173 na sua máquina
-    networks:
-      - gtv_network
-    restart: unless-stopped
-    depends_on:
-      - backend
-
-  cloudflared-tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: gt-vision-tunnel
-    restart: unless-stopped
-    depends_on:
-      - ai-processor
-    networks:
-      - gtv_network
-    command: tunnel --no-autoupdate run --token eyJhIjoiY2JjZTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnblMzYiLCJ0IjoiNjQ0ZTRhNTgtNjk0NC00NGQxLTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnbEVTJhFfiMnSyHmmM8BYrtTFCKQgQJ7yKSmnbNVGN0Tm1GbU9UWmhNRFV6TXpVeCJ9
 
 volumes:
   postgres_data:

@@ -1,5 +1,6 @@
 #!/bin/sh
-set -e
+
+# A linha 'set -e' foi removida para corrigir o erro 'Illegal option'.
 
 echo "Waiting for PostgreSQL..."
 

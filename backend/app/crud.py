@@ -65,11 +65,23 @@ async def get_cameras_by_client(db: AsyncSession, client_id: int, skip: int = 0,
     )
     return result.scalars().all()
 
+# --- NOVA FUNÇÃO ADICIONADA ---
+async def get_cameras_by_type(db: AsyncSession, camera_type: str) -> List[models.Camera]:
+    """Retorna todas as câmeras ativas de um tipo específico."""
+    result = await db.execute(
+        select(models.Camera)
+        .filter(models.Camera.camera_type == camera_type, models.Camera.is_active == True)
+    )
+    return result.scalars().all()
+# -----------------------------
+
+# --- FUNÇÃO ATUALIZADA ---
 async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int, redis_client: redis.Redis) -> models.Camera:
     """Cria uma nova câmera para um cliente de forma explícita e invalida o cache de estatísticas."""
     db_camera = models.Camera(
         name=camera.name,
         rtsp_url=camera.rtsp_url,
+        camera_type=camera.camera_type, # <-- Campo adicionado
         is_active=camera.is_active,
         latitude=camera.latitude,
         longitude=camera.longitude,
@@ -81,6 +93,7 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     cache_key = f"dashboard_stats:{client_id}"
     await redis_client.delete(cache_key)
     return db_camera
+# -------------------------
 
 async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_client: redis.Redis):
     """Apaga uma câmera e invalida o cache de estatísticas."""
@@ -255,4 +268,4 @@ async def delete_ticket(db: AsyncSession, ticket_id: int) -> Optional[models.Tic
         await db.delete(ticket)
         await db.commit()
     return ticket
-# endregion 
+# endregion

@@ -1,10 +1,12 @@
 import asyncio
 import os
+import json
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
+# Ajuste os imports para o caminho relativo correto dentro do seu projeto
 from .database import SessionLocal
 from . import models, schemas, crud
 from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming, coletor
@@ -16,20 +18,19 @@ app = FastAPI(
 )
 
 # --- DIRETÓRIO DE CAPTURAS E ARQUIVOS ESTÁTICOS ---
-# Usar um caminho absoluto é mais seguro em ambientes de container
 CAPTURES_DIR = "/app/captures"
 os.makedirs(CAPTURES_DIR, exist_ok=True)
-
-# Monta a rota '/api/v1/captures' para servir os recortes das placas.
-# O frontend poderá aceder às imagens em: http://seu-dominio/api/v1/captures/nome_do_ficheiro.jpg
 app.mount("/api/v1/captures", StaticFiles(directory=CAPTURES_DIR), name="captures")
 
+# --- CONFIGURAÇÃO DE CORS DINÂMICA ---
+# As origens permitidas são lidas da variável de ambiente.
+origins_str = os.getenv("BACKEND_CORS_ORIGINS", '["http://localhost:5173", "http://127.0.0.1:5173"]')
+try:
+    origins = json.loads(origins_str)
+except json.JSONDecodeError:
+    print("AVISO: Falha ao decodificar BACKEND_CORS_ORIGINS. Usando valor padrão.")
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-# Permite que o frontend (rodando em localhost:5173) aceda ao backend
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,18 +53,23 @@ def on_startup():
                 client_in = schemas.ClientCreate(name="Default Client")
                 default_client = await crud.create_client(db, client=client_in)
 
-            admin_email = "admin@example.com"
+            admin_email = os.getenv("ADMIN_DEFAULT_EMAIL", "admin@example.com")
             admin_user = await crud.get_user_by_email(db, email=admin_email)
             if not admin_user:
+                admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "adminpassword")
+                if admin_password == "adminpassword":
+                    print("\033[91mAVISO DE SEGURANÇA:\033[0m A usar senha padrão para o utilizador admin. Defina a variável de ambiente ADMIN_DEFAULT_PASSWORD em produção!")
+
                 admin_in = schemas.UserCreate(
                     email=admin_email,
-                    password="adminpassword",
+                    password=admin_password,
                     full_name="Admin User",
                     client_id=default_client.id,
                     role=models.UserRole.ADMIN
                 )
                 await crud.create_user(db, user=admin_in)
-    
+
+    # Lógica para garantir que a criação de defaults rode corretamente
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:

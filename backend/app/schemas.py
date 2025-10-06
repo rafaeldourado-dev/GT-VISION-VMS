@@ -1,7 +1,8 @@
+# backend/app/schemas.py
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
-from .models import UserRole
+from .models import UserRole, CameraType # Importar o novo Enum
 
 # Schema para a câmera dentro da resposta de avistamento
 class CameraInSighting(BaseModel):
@@ -14,13 +15,9 @@ class VehicleSightingBase(BaseModel):
     license_plate: str
     vehicle_color: Optional[str] = None
     vehicle_model: Optional[str] = None
-    # Renomeando 'image_path' para ser mais específico sobre o recorte
     plate_image_url: Optional[str] = None
 
 class VehicleSightingCreate(VehicleSightingBase):
-    # <<< MUDANÇA IMPORTANTE AQUI >>>
-    # camera_id é agora opcional. O coletor o envia separadamente.
-    # A sua função CRUD deve ser inteligente o suficiente para lidar com isso.
     camera_id: Optional[int] = None
 
 class VehicleSighting(VehicleSightingBase):
@@ -34,13 +31,13 @@ class VehicleSightingResponse(BaseModel):
     license_plate: str
     vehicle_color: Optional[str] = None
     vehicle_model: Optional[str] = None
-    plate_image_url: Optional[str] = None # Campo atualizado
+    plate_image_url: Optional[str] = None
     camera: CameraInSighting
     timestamp: datetime
     class Config:
         from_attributes = True
 
-# --- Schemas de Câmera (COM ONVIF) ---
+# --- Schemas de Câmera ---
 class CameraCreateOnvif(BaseModel):
     name: str
     ip_address: str
@@ -54,6 +51,9 @@ class CameraCreateOnvif(BaseModel):
 class CameraBase(BaseModel):
     name: str
     rtsp_url: str
+    # --- CAMPO ADICIONADO ---
+    camera_type: CameraType = CameraType.GENERIC_RTSP
+    # --------------------------
     is_active: bool = True
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -64,6 +64,9 @@ class CameraCreate(CameraBase):
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
     rtsp_url: Optional[str] = None
+    # --- CAMPO ADICIONADO ---
+    camera_type: Optional[CameraType] = None
+    # --------------------------
     is_active: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
