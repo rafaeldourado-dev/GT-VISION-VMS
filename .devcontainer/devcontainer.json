@@ -1,0 +1,43 @@
+{
+  "name": "GT-Vision BETA Development",
+
+  // 1. Aponta para o seu ficheiro docker-compose principal.
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+
+  // 2. Define o 'backend' como o nosso contentor de desenvolvimento principal.
+  //    O VS Code irá ligar-se e abrir um terminal dentro deste serviço.
+  "service": "backend",
+
+  // 3. Define a pasta de trabalho dentro do contentor.
+  //    Isto corresponde ao volume que você já configurou: volumes: - ./backend:/app
+  "workspaceFolder": "/app",
+
+  // 4. Personalizações para o ambiente VS Code
+  "customizations": {
+    "vscode": {
+      // Instala extensões úteis para Python e Docker automaticamente
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+
+  // 5. Mapeia as portas para que possa aceder aos serviços no browser a partir do Codespace
+  "forwardPorts": [
+    8000,    // A sua API Backend
+    15672,   // Interface de gestão do RabbitMQ
+    5173     // Porta padrão para o frontend Vite (se o iniciar)
+  ],
+
+  // Comando a ser executado após a criação do Codespace.
+  "postCreateCommand": "echo 'Ambiente GT-Vision pronto!'",
+
+  // Garante que o utilizador dentro do contentor tem as permissões corretas
+  "remoteUser": "vscode"
+}
