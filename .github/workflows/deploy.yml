@@ -1,0 +1,55 @@
+# Nome do nosso workflow de deploy
+name: Deploy to Production VPS
+
+# Gatilho: Este workflow vai correr sempre que houver um push para a branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+# Tarefas a serem executadas
+jobs:
+  deploy:
+    # O tipo de máquina virtual que vai executar as tarefas
+    runs-on: ubuntu-latest
+
+    # Passos que a tarefa irá executar
+    steps:
+    # Passo 1: Clona o seu repositório para a máquina virtual do Actions
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Passo 2: Criar o ficheiro .env no servidor
+    - name: Create .env file on VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        script: |
+          cd GT-VISION-VMS
+          echo "${{ secrets.ENV_FILE }}" > .env
+          echo ".env file created successfully"
+
+    # Passo 3: Conectar-se ao VPS e fazer o deploy
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        script: |
+          # Navega para a pasta do projeto
+          cd GT-VISION-VMS
+
+          # Puxa as últimas alterações do GitHub
+          git pull
+
+          # Reconstrói e reinicia os serviços com Docker Compose
+          echo "Starting Docker Compose build..."
+          docker compose up -d --build
+
+          # Limpa imagens Docker antigas e não utilizadas para poupar espaço
+          docker image prune -f
+
+          echo "Deployment successful!"
