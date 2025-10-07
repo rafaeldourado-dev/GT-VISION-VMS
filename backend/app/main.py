@@ -16,7 +16,7 @@ app = FastAPI(
 )
 
 # --- CORREÇÃO ADICIONADA AQUI ---
-# Define o caminho para a diretoria de capturas
+# Define o caminho para a diretoria de capturas 
 CAPTURES_DIR = Path("captures")
 # Cria a diretoria se ela não existir
 os.makedirs(CAPTURES_DIR, exist_ok=True)

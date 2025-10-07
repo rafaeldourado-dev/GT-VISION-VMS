@@ -1,36 +1,38 @@
-# Use a imagem base apropriada para sua aplicação (ex: python:3.10-slim)
+# Use the appropriate base image for your application (e.g., python:3.10-slim)
 FROM python:3.10-slim
 
-# Instala o cliente do PostgreSQL, dos2unix e o curl para o healthcheck
+# Install the PostgreSQL client, dos2unix, and curl for the healthcheck
 RUN apt-get update && apt-get install -y postgresql-client dos2unix curl && rm -rf /var/lib/apt/lists/*
 
-# Define o diretório de trabalho no contêiner
+# Set the working directory in the container
 WORKDIR /app
 
-# Copia os arquivos de dependências primeiro para aproveitar o cache
+# Copy the dependency files first to leverage caching
 COPY ./requirements.txt /app/requirements.txt
 
-# Instala as dependências do Python
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Copia o código da aplicação de forma explícita ---
+# --- Copy the application code explicitly ---
 COPY ./alembic.ini /app/alembic.ini
 COPY ./entrypoint.sh /app/entrypoint.sh
 COPY ./app /app/app
-COPY ./migrations /app/migrations
+#
+# REMOVED THIS LINE --> COPY ./migrations /app/migrations
+#
 
-# --- CORREÇÃO APLICADA AQUI ---
-# 1. Cria o diretório de capturas para que ele exista no container
+# --- CORRECTION APPLIED HERE ---
+# 1. Create the captures directory so it exists in the container
 RUN mkdir -p /app/captures
 
-# Corrige o formato de quebra de linha do entrypoint
+# Correct the line ending format of the entrypoint
 RUN dos2unix /app/entrypoint.sh
 
-# 2. Torna o script de entrypoint executável
+# 2. Make the entrypoint script executable
 RUN chmod +x /app/entrypoint.sh
 
-# Define o entrypoint
+# Set the entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# O comando a ser executado pelo entrypoint (CMD)
+# The command to be executed by the entrypoint (CMD)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
