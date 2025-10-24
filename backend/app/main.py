@@ -1,13 +1,16 @@
 import asyncio
 import os
+import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.staticfiles import StaticFiles
+from starlette.staticfiles import StaticFiles # Adicionado DBAPIError para capturar erros de transação
+from sqlalchemy.exc import ProgrammingError, DBAPIError
 
+from .config import settings 
 from .database import SessionLocal
 from . import models, schemas, crud
-from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming
+from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming, users, blacklist, notifications, audit # Removido logging_config
 
 app = FastAPI(
     title="GT-Vision API",
@@ -15,12 +18,10 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# --- CORREÇÃO ADICIONADA AQUI ---
 # Define o caminho para a diretoria de capturas
 CAPTURES_DIR = Path("captures")
 # Cria a diretoria se ela não existir
 os.makedirs(CAPTURES_DIR, exist_ok=True)
-# ---------------------------------
 
 # Monta a diretoria de ficheiros estáticos (agora com a certeza de que ela existe)
 app.mount(f"/{CAPTURES_DIR}", StaticFiles(directory=CAPTURES_DIR), name=str(CAPTURES_DIR))
@@ -47,24 +48,62 @@ def on_startup():
     se eles não existirem.
     """
     async def create_defaults():
-        async with SessionLocal() as db:
-            default_client = await crud.get_client_by_name(db, name="Default Client")
-            if not default_client:
-                client_in = schemas.ClientCreate(name="Default Client")
-                default_client = await crud.create_client(db, client=client_in)
+        # --- LÓGICA DE INICIALIZAÇÃO ROBUSTA ---
+        max_retries = 10
+        for attempt in range(max_retries):
+            try:
+                # Uma nova sessão é criada para cada tentativa, crucial para se recuperar de erros de transação.
+                async with SessionLocal() as db:
+                    # Cria/obtém o cliente padrão
+                    default_client = await crud.get_client_by_name(db, name="Default Client")
+                    if not default_client:
+                        client_in = schemas.ClientCreate(name="Default Client")
+                        default_client = await crud.create_client(db, client=client_in)
 
-            admin_email = "admin@example.com"
-            admin_user = await crud.get_user_by_email(db, email=admin_email)
-            if not admin_user:
-                admin_in = schemas.UserCreate(
-                    email=admin_email,
-                    password="adminpassword",
-                    full_name="Admin User",
-                    client_id=default_client.id,
-                    role=models.UserRole.ADMIN
-                )
-                await crud.create_user(db, user=admin_in)
-    
+                    # Cria/obtém o utilizador admin
+                    admin_email = "admin@example.com"
+                    admin_user = await crud.get_user_by_email(db, email=admin_email)
+                    if not admin_user:
+                        admin_in = schemas.UserCreate(
+                            email=admin_email,
+                            password="adminpassword",
+                            full_name="Admin User",
+                            client_id=default_client.id,
+                            role=models.UserRole.ADMIN
+                        )
+                        await crud.create_user(db, user=admin_in)
+                    
+                    # Cria/valida a chave de API interna
+                    ai_processor_api_key = await crud.validate_api_key(db, settings.ADMIN_API_KEY)
+                    if not ai_processor_api_key:
+                        api_key_in = schemas.ApiKeyCreate(
+                            key=settings.ADMIN_API_KEY,
+                            name="AI Processor Internal Key",
+                            client_id=default_client.id
+                        )
+                        await crud.create_api_key(db, api_key=api_key_in)
+                    
+                    logging.info("Inicialização de dados padrão (cliente, admin, chave de API) concluída com sucesso.")
+                    break  # Sai do loop se tudo correr bem
+            
+            except (ProgrammingError, DBAPIError) as e:
+                error_message = str(e)
+                # Verifica se o erro é recuperável (tabela ainda não criada ou transação abortada)
+                is_retryable_error = any(msg in error_message for msg in [
+                    'relation "clients" does not exist',
+                    'relation "users" does not exist',
+                    'relation "api_keys" does not exist',
+                    'current transaction is aborted'
+                ])
+
+                if is_retryable_error and attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    logging.warning(f"Erro de banco de dados na inicialização ({type(e).__name__}). As migrações podem estar em andamento. Tentativa {attempt + 1}/{max_retries}. Aguardando {wait_time}s...")
+                    await asyncio.sleep(wait_time) 
+                else:
+                    logging.error(f"Erro fatal de banco de dados na inicialização após {max_retries} tentativas: {e}")
+                    raise
+
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -81,11 +120,13 @@ app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(sightings.router, prefix="/api/v1", tags=["Detecções"])
 app.include_router(cameras.router, prefix="/api/v1", tags=["Câmeras"])
 app.include_router(crm.router, prefix="/api/v1", tags=["CRM"])
+app.include_router(blacklist.router, prefix="/api/v1", tags=["Blacklist"])
+app.include_router(users.router, prefix="/api/v1", tags=["Users"]) # Rota de usuários adicionada
 app.include_router(tickets.router, prefix="/api/v1", tags=["Tickets"])
+app.include_router(audit.router, prefix="/api/v1", tags=["Audit"]) # NOVO: Rota de auditoria
 app.include_router(internal.router, prefix="/api/v1", tags=["Internal API"])
-
-# A rota de streaming fica na raiz /ws
-app.include_router(streaming.router)
+app.include_router(notifications.router) # Rota de notificações WebSocket (prefixo /ws)
+app.include_router(streaming.router, prefix="/api/v1") # Inclui as rotas de streaming (prefixo /api/v1/streaming)
 
 @app.get("/api/health", status_code=200, tags=["Status"])
 def health_check():
