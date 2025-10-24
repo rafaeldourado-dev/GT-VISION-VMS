@@ -78,9 +78,29 @@ class User(UserBase):
     id: int
     is_active: bool
     client_id: int
+    password_change_required: bool # NOVO
     role: UserRole
     class Config:
         from_attributes = True
+
+# --- ADIÇÃO DA CLASSE FALTANTE ABAIXO ---
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = None
+    role: Optional[UserRole] = None
+# ---------------------------------------
+
+# --- NOVO: Schema para redefinição de senha ---
+class UserPasswordReset(BaseModel):
+    new_password: str
+# -------------------------------------------
+
+# --- NOVO: Schema para o próprio usuário alterar a senha ---
+class UserSelfPasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
+# ---------------------------------------------------------
 
 # Schemas de Cliente
 class ClientBase(BaseModel):
@@ -92,6 +112,39 @@ class ClientCreate(ClientBase):
 class Client(ClientBase):
     id: int
     is_active: bool
+    class Config:
+        from_attributes = True
+
+# --- ADIÇÃO DOS SCHEMAS FALTANTES ABAIXO ---
+class BlacklistedPlateBase(BaseModel):
+    license_plate: str
+    reason: Optional[str] = None
+
+class BlacklistedPlateCreate(BlacklistedPlateBase):
+    pass
+
+class BlacklistedPlate(BlacklistedPlateBase):
+    id: int
+    client_id: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+# -------------------------------------------
+
+# Schemas de Chave de API (para uso interno)
+class ApiKeyBase(BaseModel):
+    key: str
+    name: Optional[str] = None
+    is_active: bool = True
+
+class ApiKeyCreate(ApiKeyBase):
+    client_id: Optional[int] = None # Pode ser nulo para chaves globais
+
+class ApiKey(ApiKeyBase):
+    id: int
+    client_id: Optional[int] = None
+    created_at: datetime
     class Config:
         from_attributes = True
 
@@ -146,5 +199,24 @@ class Ticket(TicketBase):
     owner_id: int
     status: str
     created_at: datetime
+    class Config:
+        from_attributes = True
+
+# --- NOVO: Schemas de Log de Auditoria ---
+class AuditLogBase(BaseModel):
+    action: str
+    target_id: Optional[int] = None
+    target_type: Optional[str] = None
+    details: Optional[str] = None
+
+class AuditLogCreate(AuditLogBase):
+    pass
+
+class AuditLog(AuditLogBase):
+    id: int
+    timestamp: datetime
+    actor_id: int
+    actor: UserBase # NOVO: Inclui os dados do ator na resposta
+
     class Config:
         from_attributes = True

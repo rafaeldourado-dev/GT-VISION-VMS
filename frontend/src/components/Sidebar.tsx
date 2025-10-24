@@ -1,12 +1,14 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { LayoutDashboard, Settings, BarChart3, Search } from 'lucide-react'; // Importe o ícone 'Search'
+import { LayoutDashboard, Settings, BarChart3, Search, Camera, Map, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Sidebar: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    // NOVO ITEM DE MENU ADICIONADO AQUI
+    { name: 'Câmeras', href: '/cameras', icon: Camera }, // NOVO ITEM DE MENU
+    { name: 'Usuários', href: '/users', icon: Users },
+    { name: 'Mapa', href: '/map', icon: Map }, // NOVO ITEM DE MENU
     { name: 'Detecções', href: '/detections', icon: Search },
     { name: 'Analíticos', href: '/analytics', icon: BarChart3 },
   ];

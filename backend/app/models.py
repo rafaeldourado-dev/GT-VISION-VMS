@@ -30,6 +30,9 @@ class Client(Base):
 
     users = relationship("User", back_populates="client", cascade="all, delete-orphan")
     cameras = relationship("Camera", back_populates="client", cascade="all, delete-orphan")
+    # --- ADIÇÃO AQUI ---
+    api_keys = relationship("ApiKey", back_populates="client", cascade="all, delete-orphan")
+    blacklist_entries = relationship("BlacklistedPlate", back_populates="client", cascade="all, delete-orphan")
 
 #  Schemas de Câmera
 class User(Base):
@@ -39,6 +42,7 @@ class User(Base):
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    password_change_required = Column(Boolean, default=False, nullable=False) # NOVO
     role = Column(SQLAlchemyEnum(UserRole), default=UserRole.CLIENT_USER, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -100,3 +104,42 @@ class Ticket(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="tickets")
+
+# --- ADIÇÃO DA CLASSE FALTANTE ABAIXO ---
+class BlacklistedPlate(Base):
+    __tablename__ = "blacklisted_plates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    license_plate = Column(String, index=True, nullable=False)
+    reason = Column(String, nullable=True) # Motivo da inclusão na lista
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    client = relationship("Client", back_populates="blacklist_entries")
+
+# --- ADIÇÃO DA CLASSE FALTANTE ABAIXO: ApiKey ---
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=True) # Nome descritivo para a chave (ex: "AI Processor Key")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True) # Chave pode ser global (client_id=None) ou específica de um cliente
+    client = relationship("Client", back_populates="api_keys")
+
+# --- NOVO: Modelo para Log de Auditoria ---
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    action = Column(String, nullable=False) # Ex: "USER_CREATED", "PASSWORD_RESET"
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Quem realizou a ação
+    target_id = Column(Integer, nullable=True) # ID do objeto afetado (ex: ID do usuário criado/resetado)
+    target_type = Column(String, nullable=True) # Tipo do objeto afetado (ex: "User")
+    details = Column(String, nullable=True) # Detalhes adicionais em JSON ou texto
+
+    actor = relationship("User") # Relacionamento com o usuário que realizou a ação
