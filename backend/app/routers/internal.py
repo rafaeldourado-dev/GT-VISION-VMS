@@ -1,12 +1,14 @@
+import json
+import redis 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
-from typing import List
+from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from ..dependencies import get_db
+from ..dependencies import get_db, get_redis_client
 from .. import models, schemas, crud
-from ..config import settings
+from ..utils.email import send_blacklist_alert_email
 
 router = APIRouter(
     prefix="/internal",
@@ -17,29 +19,42 @@ router = APIRouter(
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-async def get_api_key(api_key: str = Security(api_key_header)):
+async def get_api_key(api_key: str = Security(api_key_header), db: AsyncSession = Depends(get_db)):
     """Dependência para validar a chave de API interna."""
-    if api_key == settings.ADMIN_API_KEY:
-        return api_key
-    else:
+    # A chave de API agora é buscada do banco de dados para suportar múltiplos clientes
+    db_api_key = await crud.validate_api_key(db, api_key)
+    if not db_api_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
+    return db_api_key
 
 @router.get("/cameras", 
-            response_model=List[schemas.Camera], 
+            response_model=List[Dict[str, Any]], # Alterado para refletir a nova estrutura
             dependencies=[Depends(get_api_key)])
 async def get_all_active_cameras_internal(db: AsyncSession = Depends(get_db)):
     """
     Retorna uma lista de todas as câmaras ativas no sistema.
-    Esta rota é para uso interno pelo AI-Processor.
+    Para uso interno pelo AI-Processor.
+    --- MODIFICADO ---
+    Agora, esta rota retorna a URL do stream passando pelo MediaMTX,
+    garantindo uma conexão interna e estável para o processador.
     """
     result = await db.execute(
         select(models.Camera).filter(models.Camera.is_active == True)
     )
     cameras = result.scalars().all()
-    return cameras
+
+    # Constrói a resposta com a URL interna do MediaMTX
+    cameras_with_internal_url: List[Dict[str, Any]] = []
+    for cam in cameras:
+        camera_data = schemas.Camera.model_validate(cam).model_dump()
+        # A URL que o AI-Processor vai usar aponta para o MediaMTX dentro da rede Docker
+        camera_data["rtsp_url"] = f"rtsp://gt-vision-media-server:8554/{cam.id}"
+        cameras_with_internal_url.append(camera_data)
+
+    return cameras_with_internal_url
 
 # --- ROTA PARA CRIAR SIGHTINGS (CORRIGIDA E NO LOCAL CERTO) ---
 @router.post("/sightings", 
@@ -49,6 +64,7 @@ async def get_all_active_cameras_internal(db: AsyncSession = Depends(get_db)):
 async def create_sighting_internal(
     sighting: schemas.VehicleSightingCreate,
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis_client) # <-- AGORA FUNCIONA
 ):
     """
     Cria um novo avistamento de veículo.
@@ -61,4 +77,30 @@ async def create_sighting_internal(
             detail=f"Câmara com id {sighting.camera_id} não encontrada.",
         )
             
-    return await crud.create_vehicle_sighting(db=db, sighting=sighting)
+    new_sighting = await crud.create_vehicle_sighting(db=db, sighting=sighting)
+
+    # Verifica se a placa está na lista negra do cliente associado à câmera
+    blacklisted_plate = await crud.get_blacklisted_plate_by_plate(
+        db, license_plate=sighting.license_plate, client_id=camera.client_id
+    )
+
+    if blacklisted_plate:
+        # Se estiver na lista negra, busca os admins do cliente para notificar
+        # 1. Envio de e-mail
+        admins_to_notify = await crud.get_admins_by_client(db, client_id=camera.client_id)
+        for admin in admins_to_notify:
+            await send_blacklist_alert_email(
+                recipient_email=admin.email, sighting=new_sighting
+            )
+        
+        # 2. Publicação no Redis para notificação em tempo real via WebSocket
+        alert_message = {
+            "type": "blacklist_alert",
+            "plate": new_sighting.license_plate,
+            "camera_name": new_sighting.camera.name,
+            "timestamp": new_sighting.timestamp.isoformat(),
+        }
+        channel = f"alerts:{camera.client_id}"
+        await redis_client.publish(channel, json.dumps(alert_message))
+
+    return new_sighting
