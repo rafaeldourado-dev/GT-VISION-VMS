@@ -1,5 +1,6 @@
 from pydantic import PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
@@ -14,6 +15,17 @@ class Settings(BaseSettings):
     REDIS_HOST: str
     REDIS_PORT: int = 6379
     REDIS_CACHE_TTL_SECONDS: int = 300 # Padrão de 5 minutos
+
+    # Configurações do RabbitMQ
+    RABBITMQ_HOST: str
+
+    # NOVO: Credenciais para a API do MediaMTX
+    MEDIA_SERVER_API_USER: Optional[str] = None
+    MEDIA_SERVER_API_PASS: Optional[str] = None
+
+    # NOVO: Host público para o Media Server (acessível pelo browser do cliente)
+    MEDIA_SERVER_PUBLIC_HOST: str = "localhost"
+
 
     @property
     def DATABASE_URL(self) -> str:

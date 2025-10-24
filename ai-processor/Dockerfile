@@ -1,5 +1,6 @@
 FROM python:3.10-slim
 
+ENV YOLO_CONFIG_DIR=/app/.config/Ultralytics
 # 1. Instala as dependências do sistema para OpenCV e vídeo
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -19,7 +20,8 @@ COPY requirements.txt .
 COPY fast-plate-ocr-master ./fast-plate-ocr-master
 
 # 4. Instala as dependências Python
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "./fast-plate-ocr-master[onnx]"
 
 # --- CORREÇÃO AQUI ---
 # 5. Copia o resto do código da aplicação e o modelo de forma seletiva

@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@eyevinn/webrtc-player": "^0.13.0",
     "@lumi.new/sdk": "^0.0.10",
     "@types/leaflet": "^1.9.20",
     "axios": "^1.6.0",

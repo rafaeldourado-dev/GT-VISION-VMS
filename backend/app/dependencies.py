@@ -59,6 +59,15 @@ async def get_current_user(
         raise credentials_exception
     return user
 
+async def get_current_active_user(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """Verifica se o usuário atual está ativo."""
+    if not current_user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+    return current_user
+
+
 # Nova função de dependência para verificar se o usuário é um administrador de cliente ou superior
 async def get_current_client_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
     if current_user.role not in [models.UserRole.ADMIN, models.UserRole.CLIENT_ADMIN]:
