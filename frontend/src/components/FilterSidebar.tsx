@@ -1,19 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Filter, Search, X } from 'lucide-react';
 import { useSightingStore } from '../stores/sightingStore';
+import { useCameraStore } from '../stores/cameraStore';
 
 const FilterSidebar: React.FC = () => {
   const { filters, setFilters, fetchSightings } = useSightingStore();
+  const { cameras, fetchCameras } = useCameraStore();
+
   const [plate, setPlate] = useState(filters.license_plate || '');
+  const [cameraId, setCameraId] = useState(filters.camera_id || '');
+  const [startDate, setStartDate] = useState(filters.start_date || '');
+  const [endDate, setEndDate] = useState(filters.end_date || '');
+
+  useEffect(() => {
+    // Carrega as câmeras para preencher o seletor
+    fetchCameras();
+  }, [fetchCameras]);
 
   const handleFilter = () => {
-    setFilters({ license_plate: plate });
+    setFilters({ license_plate: plate, camera_id: cameraId, start_date: startDate, end_date: endDate });
     fetchSightings();
   };
 
   const handleClear = () => {
     setPlate('');
-    setFilters({ license_plate: '' });
+    setCameraId('');
+    setStartDate('');
+    setEndDate('');
+    setFilters({ license_plate: '', camera_id: '', start_date: '', end_date: '' });
     fetchSightings();
   };
 
@@ -38,6 +52,36 @@ const FilterSidebar: React.FC = () => {
               placeholder="ABC-1234"
               className="w-full pl-10 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="camera-select" className="block text-sm font-medium text-gray-700 mb-1">
+            Câmera
+          </label>
+          <select
+            id="camera-select"
+            value={cameraId}
+            onChange={(e) => setCameraId(e.target.value)}
+            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas as câmeras</option>
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>{camera.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">
+              De
+            </label>
+            <input type="date" id="start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">
+              Até
+            </label>
+            <input type="date" id="end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
       </div>

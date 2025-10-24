@@ -7,6 +7,7 @@ interface User {
   email: string
   is_active: boolean
   full_name: string
+  password_change_required: boolean; // NOVO
   client_id: number
   role: string
 }
@@ -21,6 +22,7 @@ interface AuthState {
   setToken: (token: string) => void
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
+  updateOwnPassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   checkAuth: () => Promise<void>
 }
 
@@ -44,26 +46,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       
       // CORREÇÃO: Passamos o 'access_token' para a função getMe
       const userData = await authService.getMe(access_token);
-
-      // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
       set({
         user: userData,
         token: access_token,
         isAuthenticated: true,
         isLoading: false,
-        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
+        isAuthChecked: true,
       });
 
       toast.success('Login realizado com sucesso!');
       return true;
     } catch (error: any) {
-      // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
-      set({ 
-        isLoading: false, 
-        token: null, 
-        isAuthenticated: false,
-        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
-      });
+      set({ isLoading: false, token: null, isAuthenticated: false, isAuthChecked: true });
       if (error.response?.status === 401 || error.response?.status === 400) {
         toast.error('Email ou senha incorretos.');
       } else {
@@ -73,14 +67,24 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  updateOwnPassword: async (currentPassword, newPassword) => {
+    try {
+      await authService.updateOwnPassword(currentPassword, newPassword);
+      // Após a troca, buscamos os dados do usuário novamente para limpar a flag
+      const token = useAuthStore.getState().token;
+      if (token) {
+        const userData = await authService.getMe(token);
+        set({ user: userData });
+      }
+      return true;
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Erro ao alterar a senha.');
+      return false;
+    }
+  },
+
   logout: () => {
-    // CORREÇÃO CRÍTICA: Adicionar isAuthChecked: true
-    set({ 
-        user: null, 
-        token: null, 
-        isAuthenticated: false,
-        isAuthChecked: true, // <--- CORREÇÃO APLICADA AQUI
-    });
+    set({ user: null, token: null, isAuthenticated: false, isAuthChecked: true });
     window.location.href = '/login';
     toast.success('Logout realizado com sucesso!');
   },

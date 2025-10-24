@@ -4,14 +4,20 @@ import { useSightingStore } from '../stores/sightingStore';
 import AppLayout from '../components/AppLayout';
 import FilterSidebar from '../components/FilterSidebar';
 import SightingCard from '../components/SightingCard';
+import Pagination from '../components/Pagination';
 
 const DetectionsPage: React.FC = () => {
-  const { sightings, isLoading, fetchSightings } = useSightingStore();
+  const { sightings, isLoading, fetchSightings, currentPage, totalSightings, itemsPerPage, setCurrentPage } = useSightingStore();
 
   useEffect(() => {
     fetchSightings();
-  }, [fetchSightings]);
+  }, [fetchSightings, currentPage]);
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // O useEffect acima irá disparar a busca de dados para a nova página
+  };
+  
   return (
     <AppLayout>
       <div className="mb-8">
@@ -42,11 +48,20 @@ const DetectionsPage: React.FC = () => {
               <p className="text-gray-600">Tente ajustar os seus filtros ou aguarde novos avistamentos.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {sightings.map((sighting) => (
-                <SightingCard key={sighting.id} sighting={sighting} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {sightings.map((sighting) => (
+                  <SightingCard key={sighting.id} sighting={sighting} />
+                ))}
+              </div>
+              
+              <Pagination
+                currentPage={currentPage}
+                totalItems={totalSightings}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+              />
+            </>
           )}
         </div>
       </div>

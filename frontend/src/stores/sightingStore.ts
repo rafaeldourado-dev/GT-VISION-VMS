@@ -14,36 +14,55 @@ interface Sighting {
   }
 }
 
-// NOVO: Define a estrutura dos filtros
 interface SightingFilters {
   license_plate?: string;
+  camera_id?: number | string;
+  start_date?: string;
+  end_date?: string;
 }
 
 interface SightingState {
   sightings: Sighting[]
   isLoading: boolean
-  filters: SightingFilters // Adiciona os filtros ao estado
-  setFilters: (filters: SightingFilters) => void // Adiciona uma função para atualizar os filtros
+  filters: SightingFilters
+  totalSightings: number
+  currentPage: number
+  itemsPerPage: number
+  setFilters: (filters: SightingFilters) => void
+  setCurrentPage: (page: number) => void
   fetchSightings: () => Promise<void>
 }
 
 export const useSightingStore = create<SightingState>((set, get) => ({
   sightings: [],
   isLoading: false,
-  filters: {}, // Estado inicial dos filtros
+  filters: { license_plate: '', camera_id: '', start_date: '', end_date: '' },
+  totalSightings: 0,
+  currentPage: 1,
+  itemsPerPage: 12,
 
   setFilters: (newFilters) => {
-    set({ filters: { ...get().filters, ...newFilters } })
+    set({ filters: { ...get().filters, ...newFilters }, currentPage: 1 }); // Reseta para a página 1 ao aplicar filtros
+  },
+
+  setCurrentPage: (page: number) => {
+    set({ currentPage: page });
   },
 
   fetchSightings: async () => {
-    set({ isLoading: true })
+    set({ isLoading: true });
+    const { filters, currentPage, itemsPerPage } = get();
+    const params = {
+      ...filters,
+      skip: (currentPage - 1) * itemsPerPage,
+      limit: itemsPerPage,
+    };
     try {
-      const sightingsData = await sightingService.getSightings(get().filters)
-      set({ sightings: sightingsData, isLoading: false })
+      const { items, total } = await sightingService.getSightings(params);
+      set({ sightings: items, totalSightings: total, isLoading: false });
     } catch (error) {
-      set({ isLoading: false })
-      toast.error('Erro ao carregar as detecções.')
+      set({ isLoading: false });
+      toast.error('Erro ao carregar as detecções.');
     }
   },
 }))

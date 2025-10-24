@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Video, WifiOff } from 'lucide-react';
+import { X, Video, WifiOff, Loader } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { WebRTCPlayer } from '@eyevinn/webrtc-player';
 
 interface Camera {
   id: number;
@@ -13,53 +14,72 @@ interface VideoStreamModalProps {
 }
 
 const VideoStreamModal: React.FC<VideoStreamModalProps> = ({ camera, onClose }) => {
-  const [frameSrc, setFrameSrc] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const { token } = useAuthStore.getState();
+  const videoRef = useRef<HTMLVideoElement>(null); // Alterado para HTMLVideoElement
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useAuthStore(); // Obtém o token do store
 
   useEffect(() => {
     if (!camera || !token) {
+      setError('Câmera ou token de autenticação não disponíveis.');
+      setIsLoading(false);
       return;
     }
 
-    // Constrói a URL do WebSocket para o backend no Docker
-    const wsUrl = `ws://127.0.0.1:8000/ws/stream/${camera.id}?token=${token}`;
+    let ws: WebSocket | null = null;
+    let player: WebRTCPlayer | null = null;
     
-    socketRef.current = new WebSocket(wsUrl);
+    // Constrói a URL do WebSocket de configuração para o backend
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const domain = apiBaseUrl.replace(/^https?:\/\//, '').replace(/\/api\/v1$/, '');
+    const configWsUrl = `${wsProtocol}://${domain}/api/v1/streaming/ws/player/${camera.id}?token=${token}`;
 
-    socketRef.current.onopen = () => {
-      console.log('WebSocket conectado para a câmara:', camera.name);
-      setIsConnected(true);
+    ws = new WebSocket(configWsUrl);
+
+    ws.onopen = () => {
+      console.log(`WebSocket de configuração conectado para a câmera: ${camera.name}`);
     };
 
-    socketRef.current.onmessage = (event) => {
-      if (event.data instanceof Blob) {
-        if (frameSrc) URL.revokeObjectURL(frameSrc);
-        const url = URL.createObjectURL(event.data);
-        setFrameSrc(url);
+    ws.onmessage = async (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'webrtc_url' && videoRef.current) {
+        console.log(`Recebida URL WebRTC: ${message.url}`);
+        try {
+          player = new WebRTCPlayer({
+            video: videoRef.current,
+            type: 'whep',
+            url: message.url,
+          });
+          await player.load();
+          setIsLoading(false);
+        } catch (e: any) {
+          console.error('Erro ao iniciar o player WebRTC', e);
+          setError(`Falha ao carregar o stream de vídeo: ${e.message}`);
+          setIsLoading(false);
+        }
       }
     };
 
-    socketRef.current.onclose = () => {
-      console.log('WebSocket desconectado.');
-      setIsConnected(false);
+    ws.onerror = (err) => {
+      console.error('Erro no WebSocket de configuração:', err);
+      setError('Falha ao configurar o stream da câmera.');
+      setIsLoading(false);
     };
 
-    socketRef.current.onerror = (error) => {
-      console.error('Erro no WebSocket:', error);
-      setIsConnected(false);
+    ws.onclose = (event) => {
+      console.log(`WebSocket de configuração desconectado: ${event.reason}`);
+      if (event.code !== 1000) { // 1000 é fechamento normal
+        setError(event.reason || 'A conexão com o servidor foi perdida.');
+      }
+      setIsLoading(false);
     };
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-      if (frameSrc) {
-        URL.revokeObjectURL(frameSrc);
-      }
+      player?.destroy(); // Destrói o player WebRTC
+      ws?.close(); // Fecha o WebSocket de configuração
     };
-  }, [camera, token]);
+  }, [camera, token]); // Dependências do useEffect
 
   if (!camera) return null;
 
@@ -75,18 +95,16 @@ const VideoStreamModal: React.FC<VideoStreamModalProps> = ({ camera, onClose }) 
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-4 bg-black aspect-video flex items-center justify-center">
-          {isConnected && frameSrc ? (
-            <img src={frameSrc} alt={`Stream da ${camera.name}`} className="w-full h-full object-contain" />
-          ) : (
+        <div className="p-4 bg-black aspect-video flex items-center justify-center relative">
+          {isLoading ? (
             <div className="text-white text-center">
-              <div className="animate-pulse">
-                <WifiOff className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-              </div>
-              <p className="font-semibold">{isConnected ? "A aguardar frames..." : "A conectar ao stream..."}</p>
-              <p className="text-sm text-gray-400">Verifique se a câmara está online e a URL RTSP está correta.</p>
+              <Loader color="white" size="xl" className="mx-auto mb-4" />
+              <p className="font-semibold">A carregar stream...</p>
             </div>
+          ) : (
+            <video ref={videoRef} className="w-full h-full object-contain" autoPlay muted playsInline />
           )}
+          {error && <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4"><p className="text-red-500 text-center">{error}</p></div>}
         </div>
       </div>
     </div>

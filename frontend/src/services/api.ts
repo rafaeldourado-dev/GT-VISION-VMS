@@ -92,13 +92,33 @@ export const cameraService = {
   },
 };
 
+export const userService = {
+  getUsers: async () => {
+    const response = await api.get('/users/');
+    return response.data;
+  },
+  createUser: async (userData: any) => {
+    const response = await api.post('/users/', userData);
+    return response.data;
+  },
+  updateUser: async (userId: number, userData: any) => {
+    const response = await api.put(`/users/${userId}`, userData);
+    return response.data;
+  },
+  deleteUser: async (userId: number) => {
+    const response = await api.delete(`/users/${userId}`);
+    return response.data;
+  },
+};
+
 interface SightingFilters {
   license_plate?: string;
+  [key: string]: any; // Permite outras propriedades de filtro
 }
 
 export const sightingService = {
   getSightings: async (filters: SightingFilters = {}) => {
-    const response = await api.get('/sightings/', { params: filters });
+    const response = await api.get('/sightings', { params: filters });
     return response.data;
   },
 };
