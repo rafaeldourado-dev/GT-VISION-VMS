@@ -4,13 +4,13 @@ import logging
 from typing import List, Dict, Any
 
 class APIClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url
         self.logger = logging.getLogger(__name__)
-        self.api_key = os.getenv("ADMIN_API_KEY")
+        self.api_key = api_key
         if not self.api_key:
-            self.logger.error("A variável de ambiente ADMIN_API_KEY não está definida.")
-            raise ValueError("Chave de API não encontrada.")
+            self.logger.error("A chave de API não foi fornecida ao APIClient.")
+            raise ValueError("Chave de API não fornecida.")
         self.headers = {"X-API-Key": self.api_key}
 
     def check_api_health(self) -> bool:
@@ -39,7 +39,23 @@ class APIClient:
             self.logger.error(f"Erro de conexão ao buscar câmaras: {e}")
         return []
 
-    def send_sighting_to_api(self, plate: str, image_filename: str, camera_id: int):
+    def start_stream_proxy(self, camera_id: int):
+        """
+        Solicita ao backend que inicie o proxy de stream para uma câmera no MediaMTX.
+        Isso garante que o stream esteja disponível na URL interna.
+        """
+        proxy_url = f"{self.base_url}/api/v1/streaming/start/{camera_id}"
+        try:
+            # Usamos POST, como definido na rota do backend. A resposta não é crítica aqui.
+            response = requests.post(proxy_url, headers=self.headers)
+            if response.status_code == 200:
+                self.logger.info(f"Proxy para câmera {camera_id} ativado/verificado com sucesso.")
+            else:
+                self.logger.warning(f"Falha ao solicitar proxy para câmera {camera_id}. Status: {response.status_code}, Resposta: {response.text}")
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Erro de conexão ao solicitar proxy para câmera {camera_id}: {e}")
+
+    def send_sighting_to_api(self, plate: str, image_filename: str, camera_id: int, accuracy: float):
         # --- CORREÇÃO APLICADA AQUI ---
         # O URL foi alterado para apontar para o endpoint interno correto.
         sighting_url = f"{self.base_url}/api/v1/internal/sightings"
@@ -50,7 +66,8 @@ class APIClient:
         data = {
             "license_plate": plate,
             "camera_id": camera_id,
-            "image_path": os.path.basename(image_filename) # Enviamos o caminho da imagem como texto
+            "image_path": os.path.basename(image_filename), # Enviamos o caminho da imagem como texto
+            "accuracy": accuracy # NOVO: Inclui a acurácia
         }
         
         try:
