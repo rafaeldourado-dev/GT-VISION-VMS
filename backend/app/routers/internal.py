@@ -50,8 +50,8 @@ async def get_all_active_cameras_internal(db: AsyncSession = Depends(get_db)):
     cameras_with_internal_url: List[Dict[str, Any]] = []
     for cam in cameras:
         camera_data = schemas.Camera.model_validate(cam).model_dump()
-        # A URL que o AI-Processor vai usar aponta para o MediaMTX dentro da rede Docker
-        camera_data["rtsp_url"] = f"rtsp://gt-vision-media-server:8554/{cam.id}"
+        # O AI-Processor vai usar a URL RTSP original da câmera, sem passar pelo MediaMTX
+        camera_data["rtsp_url"] = cam.rtsp_url
         cameras_with_internal_url.append(camera_data)
 
     return cameras_with_internal_url

@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 import redis.asyncio as redis # NOVO: Importa o cliente Redis
+import cv2 # NOVO: Para capturar o frame da thumbnail
+import asyncio # NOVO: Para operações assíncronas
+from starlette.responses import Response # NOVO: Para retornar a imagem
 
-from ..dependencies import get_db, get_current_user, get_redis_client # NOVO: Importa get_redis_client
+from ..dependencies import get_db, get_current_user, get_redis_client, get_current_user_from_query_token # NOVO: Importa get_redis_client e get_current_user_from_query_token
 from .. import crud, models, schemas, messaging
 
 router = APIRouter(
@@ -49,6 +52,52 @@ async def read_cameras(
         db, client_id=current_user.client_id, skip=skip, limit=limit
     )
     return cameras
+
+@router.get("/{camera_id}/thumbnail",
+            tags=["Câmeras"],
+            response_class=Response,
+            responses={
+                200: {"content": {"image/jpeg": {}}},
+                404: {"description": "Câmera não encontrada ou stream indisponível"}
+            })
+async def get_camera_thumbnail(
+    camera_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user_from_query_token) # Usa a nova dependência
+):
+    """
+    Captura um único frame de uma câmera e o retorna como uma imagem JPEG.
+    """
+    camera = await crud.get_camera_by_id(db, camera_id=camera_id)
+    if not camera or camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+
+    if not camera.is_active:
+        raise HTTPException(status_code=400, detail="A câmera está inativa")
+
+    # Tenta capturar o frame de forma assíncrona para não bloquear o servidor
+    def capture_frame():
+        cap = cv2.VideoCapture(camera.rtsp_url)
+        if not cap.isOpened():
+            return None, None
+        
+        # Tenta ler alguns frames para garantir que a imagem não seja preta/cinza do início da conexão
+        for _ in range(5):
+            success, frame = cap.read()
+            if success:
+                break
+        
+        cap.release()
+        return success, frame
+
+    loop = asyncio.get_running_loop()
+    success, frame = await loop.run_in_executor(None, capture_frame)
+
+    if not success or frame is None:
+        raise HTTPException(status_code=404, detail="Não foi possível capturar a imagem do stream da câmera")
+
+    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    return Response(content=buffer.tobytes(), media_type="image/jpeg")
 
 @router.patch("/{camera_id}", response_model=schemas.Camera)
 async def update_camera(

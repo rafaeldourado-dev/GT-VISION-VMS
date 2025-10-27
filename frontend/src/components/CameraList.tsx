@@ -18,6 +18,7 @@ const CameraList: React.FC<CameraListProps> = ({ onViewCamera }) => {
         <div
           key={camera.id}
           className="bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+          className="bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 relative"
           onClick={() => onViewCamera({ id: camera.id, name: camera.name })}
         >
           <div className={`aspect-video flex items-center justify-center text-white bg-black`}>
@@ -25,6 +26,7 @@ const CameraList: React.FC<CameraListProps> = ({ onViewCamera }) => {
               // Mostra a imagem do thumbnail se a câmera estiver ativa
               <img
                 src={`${apiBaseUrl}/api/v1/cameras/${camera.id}/thumbnail?token=${token}`}
+                src={camera.thumbnail_url || '/placeholder-video.png'} // Usa thumbnail_url ou um placeholder
                 alt={`Preview da ${camera.name}`}
                 className="w-full h-full object-cover"
                 // Fallback para um ícone caso a imagem não carregue

@@ -1,4 +1,7 @@
 services:
+  # ===============================
+  # 📦 PostgreSQL Database
+  # ===============================
   db:
     image: postgres:13-alpine
     container_name: gt-vision-db
@@ -17,16 +20,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # ===============================
+  # 🐇 RabbitMQ (Mensageria)
+  # ===============================
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: gt-vision-rabbitmq
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Define um hostname fixo para o container. Isso é crucial para o Erlang/RabbitMQ
-    # resolver o nome do nó corretamente durante a inicialização, evitando erros de distribuição.
     hostname: gt-vision-rabbitmq
     ports:
       - "5672:5672"
-      - "15672:15672"
+      - "15672:15672" # Painel de gerenciamento
     env_file:
       - .env
     networks:
@@ -38,7 +41,10 @@ services:
       timeout: 5s
       retries: 5
 
-  redis: # NOVO SERVIÇO DE CACHE
+  # ===============================
+  # 🧠 Redis (Cache e Filas Rápidas)
+  # ===============================
+  redis:
     image: redis:7-alpine
     container_name: gt-vision-redis
     ports:
@@ -52,26 +58,32 @@ services:
       timeout: 5s
       retries: 5
 
+  # ===============================
+  # ⚙️ Backend API (FastAPI)
+  # ===============================
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: gt-vision-backend
     volumes:
       - ./backend/app:/app/app
-      - ./backend/migrations:/app/migrations  # <-- ALTERAÇÃO FEITA AQUI
-      - ./ai-processor/captures:/app/captures 
+      - ./backend/migrations:/app/migrations
+      - ./ai-processor/captures:/app/captures
+      - ./logs/backend:/app/logs
     ports:
       - "8000:8000"
-    # NOVO: Passa as credenciais do MediaMTX para o backend
-    # Certifique-se de que estas variáveis estão no seu ficheiro .env.
-    # A diretiva env_file já estava presente, mas esta é a correção que garante
-    # que o backend tenha acesso às credenciais do Media Server.
     env_file: .env
+    environment:
+      - MEDIA_SERVER_API_USER=${MEDIA_SERVER_API_USER}
+      - MEDIA_SERVER_API_PASS=${MEDIA_SERVER_API_PASS}
+      - LOG_LEVEL=info
     depends_on:
       db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      redis: # NOVO: Dependência do Redis
+      redis:
         condition: service_healthy
     networks:
       - gtv_network
@@ -83,12 +95,18 @@ services:
       retries: 5
       start_period: 30s
 
+  # ===============================
+  # 🤖 AI Processor (Visão Computacional)
+  # ===============================
   ai-processor:
-    build: ./ai-processor
+    build:
+      context: ./ai-processor
+      dockerfile: Dockerfile
     container_name: gt-vision-ai-processor
     volumes:
       - ./ai-processor:/app
       - ./ai-processor/captures:/app/captures
+      - ./logs/ai-processor:/app/logs
     environment:
       - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp
     env_file:
@@ -101,41 +119,72 @@ services:
     networks:
       - gtv_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.connect((\"rabbitmq\",5672)); s.close()'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
+  # ===============================
+  # 📡 Media Server (RTSP/RTMP/WebRTC)
+  # ===============================
   media-server:
     image: bluenviron/mediamtx:latest
     container_name: gt-vision-media-server
-    restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     ports:
       - "8554:8554"   # RTSP
       - "1935:1935"   # RTMP
       - "8889:8889"   # WebRTC
-      - "9997:9997"   # API
+      - "9997:9997"   # API HTTP
     networks:
       - gtv_network
-    # NOVO: Protege a API do MediaMTX com as credenciais do .env
+    restart: unless-stopped
     environment:
       - MTX_API_USER=${MEDIA_SERVER_API_USER}
       - MTX_API_PASS=${MEDIA_SERVER_API_PASS}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -u ${MEDIA_SERVER_API_USER}:${MEDIA_SERVER_API_PASS} http://localhost:9997/v1/config/get"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # ===============================
+  # 🌐 Frontend (Vite + Nginx)
+  # ===============================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: gt-vision-frontend
     ports:
-      - "5173:80" # Expõe a porta 80 do Nginx para 5173 na sua máquina
+      - "5173:80"
     networks:
       - gtv_network
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+# ===============================
+# 📦 Volumes Persistentes
+# ===============================
 volumes:
   postgres_data:
-
+  logs:
+# ===============================
+# 🌐 Rede Compartilhada
+# ===============================
 networks:
   gtv_network:
     driver: bridge

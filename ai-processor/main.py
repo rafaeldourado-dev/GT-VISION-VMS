@@ -42,12 +42,13 @@ def process_camera_stream(camera_info: dict, detector: PlateDetector, api_client
     separator = '&' if '?' in rtsp_url else '?'
     rtsp_url_with_timeout = f"{rtsp_url}{separator}{timeout_param}"
     # ---------------------------------
-
+    logging.info(f"AI-Processor para câmera {camera_name} (ID: {camera_id}) tentando conectar a: {rtsp_url_with_timeout}")
     logging.info(f"Iniciando processamento para a câmera: {camera_name} ({rtsp_url}) usando transporte TCP.")
     
     cap = None
     retry_count = 0
-    max_retries = 5
+    # --- ALTERAÇÃO CRÍTICA: 'max_retries' removido ---
+    # max_retries = 5 (REMOVIDO)
     retry_delay = 5 # segundos
 
     # NOVO: Variáveis para tolerância de falhas de leitura de frames
@@ -57,13 +58,13 @@ def process_camera_stream(camera_info: dict, detector: PlateDetector, api_client
     while not stop_event.is_set():
         if cap is None or not cap.isOpened():
             # NOVO: Reseta o contador de falhas de leitura ao tentar uma nova conexão
-            failed_read_count = 0
+            consecutive_read_failures = 0 # Corrigido: Usar a variável correta
             
-            if retry_count >= max_retries:
-                logging.error(f"Máximo de {max_retries} tentativas de reconexão atingido para a câmera {camera_name}. Encerrando.")
-                break
+            # --- ALTERAÇÃO CRÍTICA: Bloco 'if retry_count >= max_retries' removido ---
+            # O processador não vai mais desistir.
             
-            logging.warning(f"Stream da câmera {camera_name} indisponível. Tentando (re)conectar em {retry_delay} segundos... (Tentativa {retry_count + 1}/{max_retries})")
+            # Log atualizado para não mostrar mais o max_retries
+            logging.warning(f"Stream da câmera {camera_name} indisponível. Tentando (re)conectar em {retry_delay} segundos... (Tentativa {retry_count + 1})")
             time.sleep(retry_delay)
             cap = cv2.VideoCapture(rtsp_url_with_timeout, cv2.CAP_FFMPEG) # Usa a URL com timeout
             retry_count += 1
@@ -187,14 +188,6 @@ def initialize_active_cameras(detector: PlateDetector, api_client: APIClient):
         logging.info(f"Encontradas {len(active_cameras)} câmeras ativas. Iniciando threads...")
         for camera in active_cameras:
             # --- NOVO: Garante que o stream está ativo no MediaMTX ---
-            # Antes de iniciar o processamento, faz uma chamada ao endpoint de streaming
-            # do backend. Isso garante que o MediaMTX seja instruído a puxar o stream
-            # da câmera, disponibilizando-o na URL interna que recebemos.
-            # O AI-Processor agora depende do MediaMTX como proxy.
-            camera_id = camera.get("id")
-            if camera_id:
-                logging.info(f"Solicitando ativação do proxy para a câmera ID {camera_id}...")
-                api_client.start_stream_proxy(camera_id)
             # -----------------------------------------------------------
 
             start_processing(camera, detector, api_client)
@@ -221,7 +214,9 @@ def main():
         logging.info("Conexão com Redis estabelecida.")
     except redis.exceptions.ConnectionError as e:
         logging.error(f"Não foi possível conectar ao Redis: {e}. A funcionalidade de detecção de duplicatas não estará disponível.")
+    
     # Inicia o processamento para câmeras já ativas
+    # Esta função agora só será chamada depois que o /api/ready do backend estiver OK.
     initialize_active_cameras(plate_detector, api_client)
 
     # Conecta-se ao RabbitMQ

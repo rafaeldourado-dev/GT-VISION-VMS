@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
-from datetime import datetime, time
+from datetime import datetime, time, timedelta # NOVO: Importa timedelta
 from typing import Optional, List
 from sqlalchemy.orm import selectinload
 import json # NOVO: Para serializar/desserializar dados de/para Redis
@@ -176,6 +176,8 @@ async def get_cameras_by_client(db: AsyncSession, client_id: int, skip: int = 0,
     )
     return result.scalars().all()
 
+# REMOVIDO: A função get_active_cameras foi removida daqui
+
 async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int, redis_client: redis.Redis) -> models.Camera:
     """Cria uma nova câmera para um cliente de forma explícita e invalida o cache de estatísticas."""
     db_camera = models.Camera(
@@ -190,7 +192,7 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     await db.commit()
     await db.refresh(db_camera)
 
-    # NOVO: Invalidação do Cache-Aside (Write-Through)
+    # Invalidação do Cache-Aside (Write-Through)
     cache_key = f"dashboard_stats:{client_id}"
     await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
 
@@ -221,11 +223,12 @@ async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_
         await db.delete(camera)
         await db.commit()
         
-        # NOVO: Invalidação do Cache-Aside (Write-Through)
+        # Invalidação do Cache-Aside (Write-Through)
         cache_key = f"dashboard_stats:{client_id}"
         await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
 
-    return camera
+    # Retorna o objeto câmera deletado ou None se não encontrado/pertencente
+    return camera # Corrected: return camera object or None
 # endregion
 
 # region CRUD ApiKey
@@ -257,7 +260,6 @@ async def validate_api_key(db: AsyncSession, api_key_str: str) -> Optional[model
 async def create_vehicle_sighting(db: AsyncSession, sighting: schemas.VehicleSightingCreate) -> models.VehicleSighting:
     db_sighting = models.VehicleSighting(**sighting.dict())
     db.add(db_sighting)
-    # A acurácia já estará no sighting.dict() se o schema for atualizado
     await db.commit()
     await db.refresh(db_sighting)
     return db_sighting
@@ -290,19 +292,22 @@ async def get_sightings_by_client(
         query = query.filter(models.Camera.id == camera_id)
     if start_date:
         query = query.filter(models.VehicleSighting.timestamp >= start_date)
+    # Corrected end_date logic to be inclusive of the end day
     if end_date:
-        query = query.filter(models.VehicleSighting.timestamp <= end_date)
+         # Assuming end_date is just a date, find the end of that day
+        end_of_day = datetime.combine(end_date.date(), time.max)
+        query = query.filter(models.VehicleSighting.timestamp <= end_of_day)
     if vehicle_color:
         query = query.filter(models.VehicleSighting.vehicle_color.ilike(f"%{vehicle_color}%"))
     if vehicle_model:
         query = query.filter(models.VehicleSighting.vehicle_model.ilike(f"%{vehicle_model}%"))
 
-    # Primeiro, fazemos uma query para contar o total de resultados com os filtros aplicados
+    # Count total results with filters
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    # Depois, aplicamos a ordenação e a paginação para buscar apenas os itens da página atual
+    # Apply ordering and pagination
     paginated_query = query.order_by(models.VehicleSighting.timestamp.desc()).offset(skip).limit(limit)
     
     result = await db.execute(paginated_query)
@@ -328,16 +333,15 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
     """
     cache_key = f"dashboard_stats:{client_id}"
 
-    # 1. Tentar ler no Cache (Cache-Aside Read)
+    # 1. Try Cache Read
     cached_data = await redis_client.get(cache_key)
     if cached_data:
         try:
             return json.loads(cached_data) # Cache Hit
         except json.JSONDecodeError:
-            # Em caso de erro de desserialização, continuar para o DB
-            pass
+            pass # Cache data corrupted, proceed to DB
 
-    # 2. Se falhar (Cache Miss), consultar o DB
+    # 2. Cache Miss - Query DB
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
 
     total_cameras_query = select(func.count(models.Camera.id)).filter(models.Camera.client_id == client_id)
@@ -348,7 +352,7 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
         models.Camera.client_id == client_id, models.Camera.is_active == True
     )
     active_cameras_result = await db.execute(active_cameras_query)
-    active_cameras = active_cameras_result.scalar_one()
+    active_cameras = active_cameras_result.scalar_one() # This count represents "active" cameras in DB
 
     total_sightings_today_query = select(func.count(models.VehicleSighting.id)).join(models.Camera).filter(
         models.Camera.client_id == client_id,
@@ -359,16 +363,17 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
 
     stats = {
         "total_cameras": total_cameras,
-        "online_cameras": active_cameras,
+        # Changed 'online_cameras' to 'active_cameras' to reflect what's being counted
+        "active_cameras": active_cameras, 
         "sightings_today": total_sightings_today,
-        "alerts_24h": 0,
+        "alerts_24h": 0, # Placeholder for alerts logic if needed later
     }
 
-    # 3. Gravar no Cache antes de retornar
+    # 3. Write to Cache before returning
     await redis_client.set(
         cache_key,
         json.dumps(stats),
-        ex=settings.REDIS_CACHE_TTL_SECONDS # Define o TTL do cache
+        ex=settings.REDIS_CACHE_TTL_SECONDS # Cache TTL from settings
     )
 
     return stats

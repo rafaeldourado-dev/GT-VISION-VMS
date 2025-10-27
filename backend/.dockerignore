@@ -15,3 +15,10 @@ venv/
 # IDEs
 .idea/
 .vscode/1
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/

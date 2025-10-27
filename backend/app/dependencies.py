@@ -1,6 +1,7 @@
 from typing import AsyncGenerator
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Query
+from fastapi.security import OAuth2PasswordBearer, SecurityScopes
+import logging # Adicionado para depuração
 from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +58,37 @@ async def get_current_user(
     user = await crud.get_user_by_email(db, email=token_data.email)
     if user is None:
         raise credentials_exception
+    return user
+
+async def get_current_user_from_query_token(
+    db: AsyncSession = Depends(get_db), token: str = Query(..., alias="token") # CORRIGIDO: Removido o Depends() extra
+) -> models.User:
+    logging.info(f"Attempting to validate token from query: {token[:10]}...") # Loga os primeiros 10 caracteres do token
+    """
+    Dependência para obter o usuário atual a partir de um token JWT passado como query parameter.
+    Útil para endpoints que não podem usar o cabeçalho Authorization (ex: <img> src, <video> src).
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        logging.info(f"Token payload email: {email}")
+        if email is None:
+            logging.warning("Token payload 'sub' (email) is None.")
+            raise credentials_exception
+        token_data = schemas.TokenData(email=email)
+    except (JWTError, ValidationError) as e:
+        logging.error(f"JWT or Pydantic validation error during query token validation: {e}")
+        raise credentials_exception
+    user = await crud.get_user_by_email(db, email=token_data.email)
+    if user is None:
+        logging.warning(f"User with email {token_data.email} not found in DB for query token.")
+        raise credentials_exception
+    logging.info(f"User {user.email} successfully authenticated via query token.")
     return user
 
 async def get_current_active_user(
