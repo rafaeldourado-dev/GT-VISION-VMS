@@ -1,17 +1,22 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard'; 
-import Settings from './pages/Settings';
-import LandingPage from './pages/LandingPage';
-import Analytics from './pages/Analytics';
-import CamerasPage from './pages/CamerasPage'; // Importa a página de Câmeras
-import DetectionsPage from './pages/DetectionsPage'; // Importe a nova página
-import MapPage from './pages/MapPage'; // Importa a página do Mapa
-import UserManagementPage from './pages/UserManagementPage'; // Importa a página de Usuários
-import ProtectedRoute from './components/ProtectedRoute'; // CORREÇÃO: Importação adicionada
-import NotificationProvider from './components/NotificationProvider';
+
+// Imports agora usando o alias '@'
+import Login from '@/pages/Login';
+import Dashboard from '@/pages/Dashboard';
+import Settings from '@/pages/Settings';
+// import LandingPage from '@/pages/LandingPage'; // Removido - Não será mais usado
+import Analytics from '@/pages/Analytics';
+import CamerasPage from '@/pages/CamerasPage';
+import DetectionsPage from '@/pages/DetectionsPage';
+// import MapPage from '@/pages/MapPage'; // Removido - Corrigindo o erro de build
+import UserManagementPage from '@/pages/UserManagementPage';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import NotificationProvider from '@/components/NotificationProvider';
+
+// Importa a página de mudança forçada de senha
+import ForcePasswordChangePage from '@/pages/ForcePasswordChangePage';
 
 function App() {
   return (
@@ -28,19 +33,74 @@ function App() {
       <Router>
         <NotificationProvider>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
+            {/* CORREÇÃO DA PÁGINA EM BRANCO:
+              A rota "/" agora redireciona para "/dashboard", que é a página principal.
+              O ProtectedRoute irá então redirecionar para /login se o usuário não estiver logado.
+            */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            
             <Route path="/login" element={<Login />} />
             
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            {/* ROTAS NOVAS ADICIONADAS AQUI */}
-            <Route path="/cameras" element={<ProtectedRoute><CamerasPage /></ProtectedRoute>} />
-            <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
-            <Route path="/detections" element={<ProtectedRoute><DetectionsPage /></ProtectedRoute>} />
-            <Route path="/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
-            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            {/* Rota para mudança de senha forçada */}
+            <Route
+              path="/force-password-change"
+              element={<ForcePasswordChangePage />}
+            />
+
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cameras"
+              element={
+                <ProtectedRoute>
+                  <CamerasPage />
+                </ProtectedRoute>
+              }
+            />
             
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Rota do Mapa Removida - Corrigindo o erro de build */}
+            
+            <Route
+              path="/detections"
+              element={
+                <ProtectedRoute>
+                  <DetectionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* O "catch-all" (404) agora também redireciona para o dashboard */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </NotificationProvider>
       </Router>

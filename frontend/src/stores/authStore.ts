@@ -1,30 +1,38 @@
-import { create } from 'zustand'
-import { authService } from '../services/api'
-import toast from 'react-hot-toast'
+import { create } from 'zustand';
+import { authService } from '../services/api';
+import toast from 'react-hot-toast';
 
 interface User {
-  id: number
-  email: string
-  is_active: boolean
-  full_name: string
-  password_change_required: boolean; // NOVO
-  client_id: number
-  role: string
+  id: number;
+  email: string;
+  is_active: boolean;
+  full_name: string;
+  password_change_required: boolean;
+  client_id: number;
+  role: string;
 }
 
-// ATUALIZADO: Adicionamos 'setToken' e 'isAuthChecked' à interface
+// --- ALTERAÇÃO AQUI ---
+// O tipo de retorno do 'login' está correto.
 interface AuthState {
-  user: User | null
-  token: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  isAuthChecked: boolean
-  setToken: (token: string) => void
-  login: (email: string, password: string) => Promise<boolean>
-  logout: () => void
-  updateOwnPassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
-  checkAuth: () => Promise<void>
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isAuthChecked: boolean;
+  setToken: (token: string) => void;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<'SUCCESS' | 'PASSWORD_CHANGE_REQUIRED' | 'FAILED'>; // Alterado
+  logout: () => void;
+  updateOwnPassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<boolean>;
+  checkAuth: () => Promise<void>;
 }
+// -----------------------
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
@@ -33,7 +41,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   isAuthChecked: false,
 
-  // NOVA FUNÇÃO: Implementação do setToken
   setToken: (token: string) => {
     set({ token, isAuthenticated: !!token });
   },
@@ -41,11 +48,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true });
     try {
+      // 1. Attempt to log in. If it fails with 403, the catch block will handle it.
       const response = await authService.login(email, password);
       const { access_token } = response;
-      
-      // CORREÇÃO: Passamos o 'access_token' para a função getMe
+
+      // 2. If login is successful, fetch user data.
       const userData = await authService.getMe(access_token);
+
+      // 3. Store user data and token in the state.
       set({
         user: userData,
         token: access_token,
@@ -53,17 +63,37 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
         isAuthChecked: true,
       });
-
+      
       toast.success('Login realizado com sucesso!');
-      return true;
+      return 'SUCCESS';
+
     } catch (error: any) {
-      set({ isLoading: false, token: null, isAuthenticated: false, isAuthChecked: true });
+      set({
+        isLoading: false,
+        token: null,
+        isAuthenticated: false,
+        isAuthChecked: true,
+      });
+      
+      // 4. Check if the error is the specific 403 for required password change.
+      if (
+        error.response?.status === 403 &&
+        error.response?.headers['x-password-change-required'] === 'true'
+      ) {
+        toast.error('Você precisa alterar sua senha antes de continuar.');
+        // Return the signal for the Login component to redirect.
+        return 'PASSWORD_CHANGE_REQUIRED';
+      }
+      
+      // 5. Handle other errors like incorrect credentials.
       if (error.response?.status === 401 || error.response?.status === 400) {
         toast.error('Email ou senha incorretos.');
       } else {
         toast.error('Erro ao fazer login. Tente novamente.');
+        console.error('Login error:', error);
       }
-      return false;
+      // Retornamos falha
+      return 'FAILED';
     }
   },
 
@@ -93,16 +123,26 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await authService.refreshToken();
       const { access_token } = response;
-      
-      // CORREÇÃO: Passamos o 'access_token' para a função getMe
+
       const userData = await authService.getMe(access_token);
-      
+
       set({
         user: userData,
         token: access_token,
         isAuthenticated: true,
         isAuthChecked: true,
       });
+
+      // --- ADIÇÃO IMPORTANTE ---
+      // Se o usuário recarregar a página e ainda precisar trocar a senha,
+      // nós o forçamos a ir para a página de troca.
+      if (userData.password_change_required) {
+        // Evita loop se já estivermos na página
+        if (window.location.pathname !== '/force-password-change') {
+          window.location.href = '/force-password-change';
+        }
+      }
+      // -------------------------
     } catch (error) {
       set({
         user: null,

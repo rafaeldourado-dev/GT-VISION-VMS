@@ -7,8 +7,7 @@ from ..dependencies import get_db, get_current_client_admin, get_current_active_
 
 router = APIRouter(
     prefix="/users",
-    tags=["Users"],
-    dependencies=[Depends(get_current_client_admin)] # Protege todas as rotas
+    tags=["Users"]
 )
 
 @router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT,
@@ -34,7 +33,7 @@ async def update_own_password(
     return
 
 
-@router.get("/", response_model=List[schemas.User])
+@router.get("/", response_model=List[schemas.User], dependencies=[Depends(get_current_client_admin)])
 async def read_users_for_client(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(get_current_client_admin)
@@ -45,7 +44,7 @@ async def read_users_for_client(
     users = await crud.get_users_by_client(db, client_id=current_user.client_id)
     return users
 
-@router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_client_admin)])
 async def create_user_for_client(
     user: schemas.UserCreate,
     db: AsyncSession = Depends(get_db),
@@ -70,7 +69,7 @@ async def create_user_for_client(
     )
     return new_user
 
-@router.put("/{user_id}", response_model=schemas.User)
+@router.put("/{user_id}", response_model=schemas.User, dependencies=[Depends(get_current_client_admin)])
 async def update_user_details(
     user_id: int,
     user_update: schemas.UserUpdate,
@@ -87,7 +86,7 @@ async def update_user_details(
     return await crud.update_user(db=db, user=db_user, user_update=user_update)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_client_admin)])
 async def delete_user_from_client(
     user_id: int,
     db: AsyncSession = Depends(get_db),
@@ -106,7 +105,7 @@ async def delete_user_from_client(
     await crud.delete_user(db=db, user_id=user_id)
     return
 
-@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_client_admin)])
 async def reset_user_password(
     user_id: int,
     password_data: schemas.UserPasswordReset,

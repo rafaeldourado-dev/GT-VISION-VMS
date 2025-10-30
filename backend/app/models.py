@@ -28,8 +28,8 @@ class Client(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    users = relationship("User", back_populates="client", cascade="all, delete-orphan")
-    cameras = relationship("Camera", back_populates="client", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="client", cascade="all, delete-orphan", passive_deletes=True)
+    cameras = relationship("Camera", back_populates="client", cascade="all, delete-orphan", passive_deletes=True)
     # --- ADIÇÃO AQUI ---
     api_keys = relationship("ApiKey", back_populates="client", cascade="all, delete-orphan")
     blacklist_entries = relationship("BlacklistedPlate", back_populates="client", cascade="all, delete-orphan")
@@ -46,7 +46,7 @@ class User(Base):
     role = Column(SQLAlchemyEnum(UserRole), default=UserRole.CLIENT_USER, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
     client = relationship("Client", back_populates="users")
     tickets = relationship("Ticket", back_populates="owner")
 
@@ -59,9 +59,10 @@ class Camera(Base):
     is_active = Column(Boolean, default=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    thumbnail_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
     client = relationship("Client", back_populates="cameras")
     sightings = relationship("VehicleSighting", back_populates="camera", cascade="all, delete-orphan")
 

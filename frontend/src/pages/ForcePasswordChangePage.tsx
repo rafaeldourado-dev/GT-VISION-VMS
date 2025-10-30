@@ -13,8 +13,9 @@ import {
   Group,
 } from '@mantine/core';
 import { useAuthStore } from '../stores/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { authService } from '../services/api';
 
 const passwordSchema = z
   .object({
@@ -32,6 +33,9 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 const ForcePasswordChangePage: React.FC = () => {
   const { updateOwnPassword, user } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation() as any;
+  const passedEmail: string | undefined = location?.state?.email;
+  const passedOldPassword: string | undefined = location?.state?.oldPassword;
 
   const {
     register,
@@ -42,10 +46,23 @@ const ForcePasswordChangePage: React.FC = () => {
   });
 
   const onSubmit = async (data: PasswordFormData) => {
-    const success = await updateOwnPassword(data.currentPassword, data.newPassword);
-    if (success) {
-      toast.success('Senha alterada com sucesso! Redirecionando...');
-      navigate('/dashboard');
+    try {
+      if (passedEmail && passedOldPassword) {
+        // Fluxo inicial sem JWT
+        await authService.forcePasswordChangeInitial(
+          passedEmail,
+          data.currentPassword || passedOldPassword,
+          data.newPassword
+        );
+      } else {
+        // Fluxo autenticado (usuário já tem token)
+        const success = await updateOwnPassword(data.currentPassword, data.newPassword);
+        if (!success) return;
+      }
+      toast.success('Senha alterada com sucesso! Faça login novamente.');
+      navigate('/login');
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Erro ao alterar a senha.');
     }
   };
 
@@ -53,7 +70,11 @@ const ForcePasswordChangePage: React.FC = () => {
     <Container size={420} my={40}>
       <Title ta="center">Alteração de Senha Obrigatória</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        Olá, {user?.full_name}! Por segurança, você precisa definir uma nova senha.
+        {user?.full_name ? (
+          <>Olá, {user.full_name}! Por segurança, você precisa definir uma nova senha.</>
+        ) : (
+          <>Por segurança, você precisa definir uma nova senha para continuar.</>
+        )}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">

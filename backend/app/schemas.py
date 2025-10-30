@@ -1,6 +1,6 @@
-# backend/app/schemas.py (CORRIGIDO)
+# backend/app/schemas.py (CORRIGIDO E COMPLETO)
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import List, Optional
 from datetime import datetime
 from .models import UserRole
@@ -61,6 +61,7 @@ class CameraUpdate(BaseModel):
 class Camera(CameraBase):
     id: int
     client_id: int
+    thumbnail_url: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -68,11 +69,19 @@ class Camera(CameraBase):
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
-
+ 
 class UserCreate(UserBase):
     password: str
     client_id: int
     role: UserRole = UserRole.CLIENT_USER
+
+    @field_validator('password')
+    @classmethod
+    def password_length(cls, v: str) -> str:
+        # bcrypt has a maximum password length of 72 bytes.
+        if len(v.encode('utf-8')) > 72:
+            raise ValueError('Password must be 72 bytes or less.')
+        return v
 
 class User(UserBase):
     id: int
@@ -91,16 +100,31 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
 # ---------------------------------------
 
-# --- NOVO: Schema para redefinição de senha ---
-class UserPasswordReset(BaseModel):
-    new_password: str
-# -------------------------------------------
+# --- CORREÇÕES E ADIÇÕES NOS SCHEMAS DE SENHA ---
 
-# --- NOVO: Schema para o próprio usuário alterar a senha ---
-class UserSelfPasswordUpdate(BaseModel):
-    current_password: str
+# 1. Classe que faltava (causava o AttributeError)
+class PasswordResetRequest(BaseModel):
+    """Schema para solicitar um reset de senha"""
+    email: EmailStr
+
+# 2. Classe renomeada e corrigida (evita erro futuro)
+class PasswordReset(BaseModel):
+    """Schema para finalizar o reset de senha com um token"""
+    token: str
+    new_password: str
+
+# 3. Classe renomeada e corrigida (evita erro futuro)
+class PasswordChange(BaseModel):
+    """Schema para a mudança forçada de senha"""
+    old_password: str
     new_password: str
 # ---------------------------------------------------------
+
+# --- NOVO: Schema para troca de senha inicial (sem autenticação) ---
+class ForcedPasswordChange(BaseModel):
+    email: EmailStr
+    old_password: str
+    new_password: str
 
 # Schemas de Cliente
 class ClientBase(BaseModel):
@@ -171,6 +195,19 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+# --- ADIÇÕES PARA CORRIGIR O ERRO ---
+# Classes que estavam faltando e causando o AttributeError em users.py
+
+class UserSelfPasswordUpdate(BaseModel):
+    """Schema para o próprio usuário alterar a senha."""
+    current_password: str
+    new_password: str
+
+class UserPasswordReset(BaseModel):
+    """Schema para o admin resetar a senha de um usuário."""
+    new_password: str
+# ------------------------------------
 
 # Schemas de Dashboard
 class DashboardStats(BaseModel):

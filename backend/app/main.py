@@ -2,18 +2,16 @@ import asyncio
 import os
 import logging
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, status # <--- Adicionado 'status'
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 from sqlalchemy.exc import ProgrammingError, DBAPIError
-# from typing import List # REMOVIDO: Não é mais necessário aqui
-from sqlalchemy.ext.asyncio import AsyncSession # Adicionado import AsyncSession que faltava no seu ficheiro original para SessionLocal funcionar
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .database import SessionLocal # Usar SessionLocal
+from .database import SessionLocal
 from . import models, schemas, crud
 from .routers import auth, cameras, sightings, crm, dashboard, tickets, internal, streaming, users, blacklist, notifications, audit
-# from .routers.streaming import start_stream_proxy # REMOVIDO: Import não existe mais no streaming.py antigo
 
 app = FastAPI(
     title="GT-Vision API",
@@ -21,14 +19,16 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Define o caminho para a diretoria de capturas
+# Define o caminho para a diretoria de capturas e thumbnails
 CAPTURES_DIR = Path("captures")
-# Cria a diretoria se ela não existir
+THUMBNAILS_DIR = Path("static/thumbnails")
+# Cria as diretorias se elas não existirem
 os.makedirs(CAPTURES_DIR, exist_ok=True)
+os.makedirs(THUMBNAILS_DIR, exist_ok=True)
 
-# Monta a diretoria de ficheiros estáticos (agora com a certeza de que ela existe)
+# Monta a diretoria de ficheiros estáticos
 app.mount(f"/{CAPTURES_DIR}", StaticFiles(directory=CAPTURES_DIR), name=str(CAPTURES_DIR))
-
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Permite que o frontend (rodando em localhost:5173) aceda ao backend
 origins = [
@@ -42,6 +42,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Password-Change-Required"],
 )
 
 @app.on_event("startup")
@@ -49,31 +50,31 @@ def on_startup():
     """
     Função de inicialização que cria um cliente e um utilizador admin padrão
     se eles não existirem.
-    (A lógica de iniciar proxies foi removida)
     """
     async def create_defaults():
-        # --- LÓGICA DE INICIALIZAÇÃO ROBUSTA (O seu código original, mantido) ---
         max_retries = 10
         for attempt in range(max_retries):
             try:
-                # Uma nova sessão é criada para cada tentativa
                 async with SessionLocal() as db:
+                    
                     # Cria/obtém o cliente padrão
-                    default_client = await crud.get_client_by_name(db, name="Default Client")
+                    default_client_name = settings.GESTOR_MASTER_CLIENT_NAME
+                    default_client = await crud.get_client_by_name(db, name=default_client_name)
                     if not default_client:
-                        client_in = schemas.ClientCreate(name="Default Client")
+                        client_in = schemas.ClientCreate(name=default_client_name)
                         default_client = await crud.create_client(db, client=client_in)
 
                     # Cria/obtém o utilizador admin
-                    admin_email = "admin@example.com"
+                    admin_email = settings.GESTOR_DEFAULT_EMAIL
                     admin_user = await crud.get_user_by_email(db, email=admin_email)
                     if not admin_user:
                         admin_in = schemas.UserCreate(
                             email=admin_email,
-                            password="adminpassword",
-                            full_name="Admin User",
+                            password=settings.GESTOR_DEFAULT_PASSWORD,
+                            full_name=settings.GESTOR_DEFAULT_FULL_NAME,
                             client_id=default_client.id,
-                            role=models.UserRole.ADMIN
+                            role=models.UserRole.ADMIN,
+                            password_change_required=False
                         )
                         await crud.create_user(db, user=admin_in)
 
@@ -107,8 +108,6 @@ def on_startup():
                     logging.error(f"Erro fatal de banco de dados na inicialização após {max_retries} tentativas: {e}")
                     raise
 
-    # REMOVIDO: A função start_active_camera_proxies foi removida daqui
-
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -116,10 +115,16 @@ def on_startup():
 
     if loop and loop.is_running():
         loop.create_task(create_defaults())
-        # REMOVIDO: A chamada loop.create_task(start_active_camera_proxies()) foi removida
     else:
         asyncio.run(create_defaults())
-        # REMOVIDO: A chamada asyncio.run(start_active_camera_proxies()) foi removida
+
+# --- INÍCIO DA CORREÇÃO (Etapa 1A) ---
+# Adiciona a rota de healthcheck pública
+@app.get("/api/health", status_code=status.HTTP_200_OK, tags=["Health"])
+def health_check():
+    """Verificação de saúde pública para o Docker."""
+    return {"status": "ok"}
+# --- FIM DA CORREÇÃO ---
 
 # Registra as rotas da API
 app.include_router(auth.router, prefix="/api/v1", tags=["Autenticação"])
@@ -133,10 +138,8 @@ app.include_router(tickets.router, prefix="/api/v1", tags=["Tickets"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(internal.router, prefix="/api/v1", tags=["Internal API"])
 app.include_router(notifications.router) # Rota de notificações WebSocket (prefixo /ws)
-# CORRIGIDO: O prefixo /api/v1 foi removido daqui para usar o prefixo /ws do router antigo
-app.include_router(streaming.router)
 
-@app.get("/api/health", status_code=200, tags=["Status"])
-def health_check():
-    """Verifica a saúde da API."""
-    return {"status": "ok"}
+# --- INÍCIO DA CORREÇÃO (Etapa 2C) ---
+# O prefixo /api/v1 foi removido daqui para usar o prefixo /ws do router antigo
+app.include_router(streaming.router, tags=["Streaming"])
+# --- FIM DA CORREÇÃO ---

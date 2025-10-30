@@ -20,10 +20,28 @@ const Login: React.FC = () => {
     e.preventDefault();
     if (!email || !password) return;
 
-    const success = await login(email, password);
-    if (success) {
+    // --- CORREÇÃO AQUI ---
+    // A função login agora retorna um status ('SUCCESS', 'PASSWORD_CHANGE_REQUIRED', 'FAILED')
+    const result = await login(email, password);
+
+    if (result === 'SUCCESS') {
       navigate('/dashboard');
+    } else if (result === 'PASSWORD_CHANGE_REQUIRED') {
+      // Se a senha precisar ser alterada, navegamos para a página
+      // de troca forçada.
+      // É CRÍTICO passar o email e a senha antiga (a que o usuário acabou de digitar)
+      // no 'state', porque a próxima página precisará deles para
+      // autenticar a troca sem um token.
+      navigate('/force-password-change', {
+        state: {
+          email: email,
+          oldPassword: password,
+        },
+      });
     }
+    // Se o resultado for 'FAILED', a store já exibiu um toast de erro,
+    // então não precisamos fazer mais nada aqui.
+    // --- FIM DA CORREÇÃO ---
   };
 
   return (
@@ -40,11 +58,14 @@ const Login: React.FC = () => {
           <h2 className="text-3xl font-bold text-gray-900">Acesse sua Conta</h2>
           <p className="mt-2 text-gray-600">Bem-vindo de volta ao GT Vision.</p>
         </div>
-        
+
         <div className="bg-white rounded-xl shadow-lg p-8">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Email
               </label>
               <div className="relative">
@@ -63,7 +84,10 @@ const Login: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Senha
               </label>
               <div className="relative">
@@ -83,7 +107,11 @@ const Login: React.FC = () => {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -105,11 +133,14 @@ const Login: React.FC = () => {
           </form>
         </div>
         <p className="text-center text-sm text-gray-500 mt-6">
-          Não tem uma conta? <a href="#" className="font-medium text-blue-600 hover:text-blue-500">Contate o suporte</a>
+          Não tem uma conta?{' '}
+          <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+            Contate o suporte
+          </a>
         </p>
       </div>
     </div>
-  )
-}
+  );
+};
 
 export default Login;

@@ -176,6 +176,17 @@ async def get_cameras_by_client(db: AsyncSession, client_id: int, skip: int = 0,
     )
     return result.scalars().all()
 
+# --- INÍCIO DA CORREÇÃO ---
+async def get_camera_by_rtsp_url(db: AsyncSession, rtsp_url: str, client_id: int) -> Optional[models.Camera]:
+    """Busca uma câmera pela sua URL RTSP e ID do cliente."""
+    query = select(models.Camera).where(
+        models.Camera.rtsp_url == rtsp_url,
+        models.Camera.client_id == client_id  # Filtro de cliente adicionado
+    )
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+# --- FIM DA CORREÇÃO ---
+
 # REMOVIDO: A função get_active_cameras foi removida daqui
 
 async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, client_id: int, redis_client: redis.Redis) -> models.Camera:
@@ -192,9 +203,16 @@ async def create_client_camera(db: AsyncSession, camera: schemas.CameraCreate, c
     await db.commit()
     await db.refresh(db_camera)
 
-    # Invalidação do Cache-Aside (Write-Through)
-    cache_key = f"dashboard_stats:{client_id}"
-    await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+    # --- INÍCIO DA CORREÇÃO (Resiliência do Redis) ---
+    try:
+        # Invalidação do Cache-Aside (Write-Through)
+        cache_key = f"dashboard_stats:{client_id}"
+        await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+    except Exception as e:
+        # Se o Redis falhar, não quebre a requisição.
+        # Apenas logue o erro (em um app real, use logging)
+        print(f"CRITICAL: Failed to invalidate cache for client {client_id} after camera creation: {e}")
+    # --- FIM DA CORREÇÃO ---
 
     return db_camera
 
@@ -209,9 +227,15 @@ async def update_camera(db: AsyncSession, camera_id: int, camera_update: schemas
         await db.commit()
         await db.refresh(camera)
 
-        # Invalidação do Cache-Aside
-        cache_key = f"dashboard_stats:{client_id}"
-        await redis_client.delete(cache_key)
+        # --- INÍCIO DA CORREÇÃO (Resiliência do Redis) ---
+        try:
+            # Invalidação do Cache-Aside
+            cache_key = f"dashboard_stats:{client_id}"
+            await redis_client.delete(cache_key)
+        except Exception as e:
+            # Se o Redis falhar, não quebre a requisição.
+            print(f"CRITICAL: Failed to invalidate cache for client {client_id} after camera update: {e}")
+        # --- FIM DA CORREÇÃO ---
 
         return camera
     return None
@@ -219,16 +243,26 @@ async def update_camera(db: AsyncSession, camera_id: int, camera_update: schemas
 async def delete_camera(db: AsyncSession, camera_id: int, client_id: int, redis_client: redis.Redis):
     """Apaga uma câmera e invalida o cache de estatísticas."""
     camera = await get_camera_by_id(db, camera_id=camera_id)
-    if camera:
+
+    # --- INÍCIO DA CORREÇÃO (Lógica e Resiliência) ---
+    # Verifica se a câmera existe E pertence ao cliente correto
+    if camera and camera.client_id == client_id:
         await db.delete(camera)
         await db.commit()
         
-        # Invalidação do Cache-Aside (Write-Through)
-        cache_key = f"dashboard_stats:{client_id}"
-        await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+        try:
+            # Invalidação do Cache-Aside (Write-Through)
+            cache_key = f"dashboard_stats:{client_id}"
+            await redis_client.delete(cache_key) # Força a próxima leitura a ir para o DB
+        except Exception as e:
+            # Se o Redis falhar, não quebre a requisição.
+            print(f"CRITICAL: Failed to invalidate cache for client {client_id} after camera deletion: {e}")
 
-    # Retorna o objeto câmera deletado ou None se não encontrado/pertencente
-    return camera # Corrected: return camera object or None
+        return camera # Retorna a câmera que foi deletada
+    
+    # Se a câmera não for encontrada ou não pertencer ao cliente, retorna None
+    return None
+    # --- FIM DA CORREÇÃO ---
 # endregion
 
 # region CRUD ApiKey
@@ -340,6 +374,8 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
             return json.loads(cached_data) # Cache Hit
         except json.JSONDecodeError:
             pass # Cache data corrupted, proceed to DB
+        except Exception: # Cobre falhas de conexão com Redis na leitura
+            pass # Prossiga para o DB
 
     # 2. Cache Miss - Query DB
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
@@ -370,11 +406,15 @@ async def get_dashboard_stats(db: AsyncSession, client_id: int, redis_client: re
     }
 
     # 3. Write to Cache before returning
-    await redis_client.set(
-        cache_key,
-        json.dumps(stats),
-        ex=settings.REDIS_CACHE_TTL_SECONDS # Cache TTL from settings
-    )
+    try:
+        await redis_client.set(
+            cache_key,
+            json.dumps(stats),
+            ex=settings.REDIS_CACHE_TTL_SECONDS # Cache TTL from settings
+        )
+    except Exception as e:
+        # Se falhar ao escrever no cache, apenas logue, não quebre a requisição
+        print(f"CRITICAL: Failed to write to cache for client {client_id}: {e}")
 
     return stats
 # endregion

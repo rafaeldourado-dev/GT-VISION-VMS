@@ -57,5 +57,20 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     ADMIN_API_KEY: str
+    
+    # --- CORREÇÕES ADICIONADAS AQUI ---
+
+    # 1. Chave do erro anterior
+    REFRESH_SECRET_KEY: str 
+
+    # 2. Chave do erro atual (para cookies seguros)
+    ENVIRONMENT: str = "development" # Padrão 'development' se não estiver no .env
+
+    # 3. Credenciais do Gestor Master (para remover do main.py)
+    GESTOR_MASTER_CLIENT_NAME: str
+    GESTOR_DEFAULT_EMAIL: str
+    GESTOR_DEFAULT_FULL_NAME: str
+    GESTOR_DEFAULT_PASSWORD: str
 
 settings = Settings()
+# ------------------------------------

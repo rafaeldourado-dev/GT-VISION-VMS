@@ -10,6 +10,7 @@ interface Camera {
   longitude?: number | null
   is_active: boolean
   client_id: number
+  thumbnail_url?: string | null // NOVO: Adicionado thumbnail_url
 }
 
 interface NewCameraData {
@@ -25,6 +26,7 @@ interface CameraState {
   fetchCameras: () => Promise<void>
   addCamera: (cameraData: NewCameraData) => Promise<boolean>
   deleteCamera: (cameraId: number) => Promise<void>
+  refreshCameraThumbnail: (cameraId: number) => Promise<void> // NOVO: Ação para atualizar thumbnail
 }
 
 export const useCameraStore = create<CameraState>((set) => ({
@@ -69,6 +71,19 @@ export const useCameraStore = create<CameraState>((set) => ({
       toast.success('Câmara excluída com sucesso!')
     } catch (error) {
       toast.error('Erro ao excluir câmara.')
+    }
+  },
+
+  refreshCameraThumbnail: async (cameraId: number) => { // NOVO: Implementação da ação
+    try {
+      await cameraService.refreshThumbnail(cameraId);
+      toast.success('Atualização do thumbnail solicitada!');
+      // O frontend vai buscar as câmeras novamente após um pequeno delay para dar tempo ao backend
+      setTimeout(() => {
+        get().fetchCameras();
+      }, 3000);
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Erro ao solicitar atualização do thumbnail.');
     }
   },
 }))

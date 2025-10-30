@@ -1,90 +1,128 @@
 import React, { useEffect, useState } from 'react';
-import AppLayout from '../components/AppLayout';
+import { VideoCameraIcon, ArrowPathIcon, EyeIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useCameraStore } from '../stores/cameraStore';
-import { Camera, PlusCircle, Video, VideoOff, MoreVertical, Edit, Trash2 } from 'lucide-react';
-import AddCameraModal from '../components/AddCameraModal'; // Importa o modal
+import { useAuthStore } from '../stores/authStore';
+import AppLayout from '../components/AppLayout';
+import AddCameraModal from '../components/AddCameraModal';
+import StreamModal from '../components/StreamModal.tsx'; // Explicitamente adiciona a extensão .tsx
+import { Camera } from '../types'; // Supondo que você tenha um arquivo de tipos
 
 const CamerasPage: React.FC = () => {
-  const { cameras, isLoading, fetchCameras, deleteCamera } = useCameraStore();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [cameraToEdit, setCameraToEdit] = useState<any | null>(null);
+  const { cameras, isLoading, fetchCameras, deleteCamera, refreshCameraThumbnail } = useCameraStore();
+  const { token } = useAuthStore();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
+  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
+  const [refreshing, setRefreshing] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     fetchCameras();
   }, [fetchCameras]);
 
-  const handleAddCamera = () => {
-    setCameraToEdit(null);
-    setIsModalOpen(true);
+  const handleRefreshThumbnail = async (cameraId: number) => {
+    setRefreshing(prev => ({ ...prev, [cameraId]: true }));
+    await refreshCameraThumbnail(cameraId);
+    // O store já tem um timeout para refetch, então só precisamos esperar
+    setTimeout(() => {
+      setRefreshing(prev => ({ ...prev, [cameraId]: false }));
+    }, 3500); // Um pouco mais que o timeout do store
   };
 
-  const handleEditCamera = (camera: any) => {
-    setCameraToEdit(camera);
-    setIsModalOpen(true);
-  }
+  const handleDelete = async (cameraId: number) => {
+    if (window.confirm('Tem certeza que deseja excluir esta câmera? Esta ação não pode ser desfeita.')) {
+      await deleteCamera(cameraId);
+    }
+  };
+
+  const openStreamModal = (camera: Camera) => {
+    setSelectedCamera(camera);
+    setIsStreamModalOpen(true);
+  };
 
   return (
     <AppLayout>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 flex items-center">
-            <Camera className="w-7 h-7 mr-3" />
-            Gerenciamento de Câmeras
-          </h2>
-          <p className="text-gray-600 mt-1">Adicione, edite e visualize suas câmeras de monitoramento.</p>
+          <h2 className="text-3xl font-bold text-gray-900">Câmeras</h2>
+          <p className="text-gray-600">Gerencie suas câmeras e visualize os streams.</p>
         </div>
         <button
-          onClick={handleAddCamera}
-          className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+          onClick={() => setIsAddModalOpen(true)}
+          className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
         >
-          <PlusCircle className="w-5 h-5 mr-2" />
+          <PlusIcon className="w-5 h-5 mr-2" />
           Adicionar Câmera
         </button>
       </div>
 
       {isLoading ? (
-        <div className="p-8 text-center bg-white rounded-lg shadow-sm">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Carregando câmeras...</p>
-        </div>
-      ) : cameras.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-lg shadow-sm">
-          <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma câmera cadastrada</h3>
-          <p className="text-gray-600">Clique em "Adicionar Câmera" para começar.</p>
-        </div>
+        <div className="text-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div><p className="mt-2">Carregando câmeras...</p></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {cameras.map((camera) => (
-            <div key={camera.id} className="bg-white rounded-lg shadow-sm p-4 flex flex-col">
-              <div className="flex justify-between items-start">
-                <h3 className="font-bold text-gray-800 mb-1">{camera.name}</h3>
-                {/* Menu de Ações (a ser implementado com dropdown) */}
-                <div className="relative">
-                   <button onClick={() => deleteCamera(camera.id)} className="text-gray-400 hover:text-red-600 p-1 rounded-full">
-                      <Trash2 className="w-4 h-4" />
-                   </button>
+        <div className="bg-white rounded-lg shadow-sm">
+          <ul role="list" className="divide-y divide-gray-200">
+            {cameras.map((camera) => (
+              <li key={camera.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
+                <div className="flex items-center gap-4">
+                  {camera.thumbnail_url ? (
+                    <img
+                      src={camera.thumbnail_url}
+                      alt={camera.name}
+                      className="h-12 w-12 rounded-full object-cover bg-gray-200"
+                      onError={(e) => { e.currentTarget.src = '/placeholder.png'; }} // Fallback
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center">
+                      <VideoCameraIcon className="h-6 w-6 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="flex-grow">
+                    <p className="text-sm font-semibold text-gray-900">{camera.name}</p>
+                    <p className="text-sm text-gray-500">{camera.rtsp_url}</p>
+                  </div>
                 </div>
-              </div>
-              <p className="text-sm text-gray-500 truncate" title={camera.rtsp_url}>
-                {camera.rtsp_url}
-              </p>
-              <div className="flex-grow"></div>
-              <div className="mt-4 flex justify-between items-center">
-                <div className={`flex items-center text-sm ${camera.is_active ? 'text-green-600' : 'text-red-600'}`}>
-                  {camera.is_active ? <Video className="w-4 h-4 mr-1" /> : <VideoOff className="w-4 h-4 mr-1" />}
-                  {camera.is_active ? 'Ativa' : 'Inativa'}
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleRefreshThumbnail(camera.id)}
+                    disabled={refreshing[camera.id]}
+                    className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Atualizar thumbnail"
+                  >
+                    {refreshing[camera.id] ? (
+                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <ArrowPathIcon className="h-5 w-5" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => openStreamModal(camera)}
+                    className="p-2 text-blue-500 hover:text-blue-700"
+                    title="Ver stream"
+                  >
+                    <EyeIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(camera.id)}
+                    className="p-2 text-red-500 hover:text-red-700"
+                    title="Excluir câmera"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
                 </div>
-                {/* Botão de edição (a ser implementado) */}
-                <button onClick={() => handleEditCamera(camera)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full">
-                  <Edit className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-      <AddCameraModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} cameraToEdit={cameraToEdit} />
+
+      <AddCameraModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      {selectedCamera && token && (
+        <StreamModal
+          isOpen={isStreamModalOpen}
+          onClose={() => setIsStreamModalOpen(false)}
+          camera={selectedCamera}
+          token={token}
+        />
+      )}
     </AppLayout>
   );
 };

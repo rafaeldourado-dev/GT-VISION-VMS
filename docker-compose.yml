@@ -73,11 +73,41 @@ services:
       - ./logs/backend:/app/logs
     ports:
       - "8000:8000"
-    env_file: .env
+    # env_file: .env  # <-- DESABILITADO PARA O TESTE
     environment:
-      - MEDIA_SERVER_API_USER=${MEDIA_SERVER_API_USER}
-      - MEDIA_SERVER_API_PASS=${MEDIA_SERVER_API_PASS}
+      # --- INÍCIO DA CORREÇÃO (HARDCODE) ---
+      # Credenciais fixas para teste:
+      - MEDIAMTX_API_USER=admin_final
+      - MEDIAMTX_API_PASS=senha_final_123
+      
+      # --- Variáveis copiadas do .env ---
+      - POSTGRES_SERVER=db
+      - POSTGRES_USER=gtvision_user
+      - POSTGRES_PASSWORD=UltraSecurePassword_ChangeMe_34987
+      - POSTGRES_DB=gtvision_db
+      - POSTGRES_PORT=5432
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_LPR_RESULTS_QUEUE=lpr_results_queue
+      - RABBITMQ_CLIP_JOBS_QUEUE=clip_jobs_queue
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CACHE_TTL_SECONDS=300
+      - ADMIN_API_KEY=r49w4393042
+      - SECRET_KEY=a7b2c9f8d1e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_SECRET_KEY=seu_segredo_para_refresh_tokens_aqui_87654321
+      - ENVIRONMENT=development
+      - MEDIAMTX_API_URL=http://media-server:9997
+      - MEDIA_SERVER_PUBLIC_HOST=127.0.0.1
+      - GESTOR_MASTER_CLIENT_NAME=GT-Vision Master
+      - GESTOR_DEFAULT_EMAIL=gestor@gtvision.com
+      - GESTOR_DEFAULT_FULL_NAME=Gestor Master
+      - GESTOR_DEFAULT_PASSWORD=GestorAdmin@2025!
       - LOG_LEVEL=info
+      # --- FIM DAS VARIÁVEIS DO .ENV ---
     depends_on:
       db:
         condition: service_healthy
@@ -129,11 +159,10 @@ services:
   # ===============================
   # 📡 Media Server (RTSP/RTMP/WebRTC)
   # ===============================
-  media-server:
+  media-server: 
     image: bluenviron/mediamtx:latest
     container_name: gt-vision-media-server
-    env_file:
-      - .env
+    # env_file: - .env # <-- DESABILITADO PARA O TESTE
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     ports:
@@ -145,10 +174,16 @@ services:
       - gtv_network
     restart: unless-stopped
     environment:
-      - MTX_API_USER=${MEDIA_SERVER_API_USER}
-      - MTX_API_PASS=${MEDIA_SERVER_API_PASS}
+      # --- INÍCIO DA CORREÇÃO (HARDCODE) ---
+      # Credenciais fixas para teste:
+      - MTX_API_USER=admin_final
+      - MTX_API_PASS=senha_final_123
+      # --- FIM DA CORREÇÃO ---
     healthcheck:
-      test: ["CMD-SHELL", "curl -f -u ${MEDIA_SERVER_API_USER}:${MEDIA_SERVER_API_PASS} http://localhost:9997/v1/config/get"]
+      # --- INÍCIO DA CORREÇÃO (HARDCODE) ---
+      # O healthcheck também precisa usar os valores fixos
+      test: ["CMD-SHELL", "curl -f -u admin_final:senha_final_123 http://localhost:9997/v3/paths/list"]
+      # --- FIM DA CORREÇÃO ---
       interval: 20s
       timeout: 5s
       retries: 5
@@ -181,7 +216,8 @@ services:
 # ===============================
 volumes:
   postgres_data:
-  logs:
+  logs: 
+
 # ===============================
 # 🌐 Rede Compartilhada
 # ===============================

@@ -1,155 +1,229 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from sqlalchemy.ext.asyncio import AsyncSession  # <-- CHANGED
+from sqlalchemy.exc import IntegrityError # <-- ADDED
 from typing import List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-import redis.asyncio as redis # NOVO: Importa o cliente Redis
-import cv2 # NOVO: Para capturar o frame da thumbnail
-import asyncio # NOVO: Para operações assíncronas
-from starlette.responses import Response # NOVO: Para retornar a imagem
+import redis.asyncio as redis  # <-- ADDED
 
-from ..dependencies import get_db, get_current_user, get_redis_client, get_current_user_from_query_token # NOVO: Importa get_redis_client e get_current_user_from_query_token
-from .. import crud, models, schemas, messaging
+from app import crud, models, schemas # Re-adicionado o import de schemas
+from app.dependencies import get_db, get_redis_client, get_current_active_user # Re-adicionado o import de dependências
+from app.services.mediamtx_api import mediamtx_api
+from app.services.thumbnail_service import generate_thumbnail_task
 
 router = APIRouter(
     prefix="/cameras",
-    tags=["Câmeras"],
-    dependencies=[Depends(get_current_user)],
-    responses={404: {"description": "Not found"}},
+    tags=["cameras"],
+    dependencies=[Depends(get_current_active_user)],
 )
 
-@router.post("/", response_model=schemas.Camera, status_code=status.HTTP_201_CREATED)
-async def create_camera(
+@router.post("/", response_model=schemas.Camera)
+async def create_camera_with_mediamtx(  # <-- CHANGED
     camera: schemas.CameraCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    redis_client: redis.Redis = Depends(get_redis_client), # NOVO: Adiciona o cliente Redis
+    redis_client: redis.Redis = Depends(get_redis_client),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    """Cria uma nova câmera para o cliente do usuário autenticado e invalida o cache de estatísticas."""
-    try:
-        new_camera = await crud.create_client_camera(
-            db=db, camera=camera, client_id=current_user.client_id, redis_client=redis_client # NOVO: Passa o cliente Redis
-        )
-        # Se a câmera for criada como ativa, envia comando para iniciar o processamento
-        if new_camera.is_active:
-            messaging.publish_camera_command(action="start", camera=new_camera)
-
-        return new_camera
-    except IntegrityError:
+    """
+    Cria uma nova câmera no banco de dados e a registra no MediaMTX.
+    """
+    
+    # --- INÍCIO DA CORREÇÃO ---
+    # Verifica se a câmera já existe PARA ESTE CLIENTE
+    existing_camera = await crud.get_camera_by_rtsp_url(
+        db, 
+        rtsp_url=camera.rtsp_url, 
+        client_id=current_user.client_id  # <-- CORREÇÃO: Passa o ID do cliente atual
+    )
+    if existing_camera:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Uma câmera com esta URL RTSP já existe.",
+            detail=f"A camera with RTSP URL '{camera.rtsp_url}' already exists for your account." # <-- Mensagem de erro melhorada
         )
+    # --- FIM DA CORREÇÃO ---
 
+    try:
+        # Cria a câmera no banco
+        db_camera = await crud.create_client_camera(  # <-- CHANGED
+            db=db, 
+            camera=camera, 
+            client_id=current_user.client_id,  # <-- ADDED
+            redis_client=redis_client          # <-- ADDED
+        )
+    except IntegrityError:
+        # --- CORREÇÃO DE RACE CONDITION (409) ---
+        # Se uma requisição concorrente já criou, o commit falhará.
+        await db.rollback() # Desfaz a transação
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A camera with RTSP URL '{camera.rtsp_url}' was created by a concurrent request."
+        )
+    except Exception as e:
+        # --- NOVA CORREÇÃO (500) ---
+        # Captura QUALQUER outro erro inesperado que possa acontecer
+        await db.rollback() # Desfaz a transação
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred while creating the camera: {str(e)}"
+        )
+    
+    # Adiciona o path no MediaMTX
+    try:
+        await mediamtx_api.add_path(
+            path_name=str(db_camera.id),
+            config={
+                "source": db_camera.rtsp_url,
+                "sourceOnDemand": True
+            }
+        )
+    except Exception as e:
+        # Se falhar no mediamtx, reverte a criação da câmera
+        await db.delete(db_camera)  # <-- CHANGED
+        await db.commit()      # <-- CHANGED
+        raise HTTPException(status_code=500, detail=f"Failed to add camera to MediaMTX: {e}") # Re-adicionado o raise HTTPException
+
+    # Agenda a geração do thumbnail em background 
+    background_tasks.add_task(generate_thumbnail_task, db_camera.id)
+    
+    return db_camera
 @router.get("/", response_model=List[schemas.Camera])
-async def read_cameras(
-    skip: int = 0,
-    limit: int = 100,
+async def read_cameras(  # <-- CHANGED
+    skip: int = 0, 
+    limit: int = 100, 
     db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    """Lista as câmaras pertencentes ao cliente do usuário autenticado."""
-    cameras = await crud.get_cameras_by_client(
+    """
+    Lista todas as câmeras.
+    """
+    # This was the function causing your specific error
+    cameras = await crud.get_cameras_by_client(  # <-- CHANGED
         db, client_id=current_user.client_id, skip=skip, limit=limit
     )
     return cameras
 
-@router.get("/{camera_id}/thumbnail",
-            tags=["Câmeras"],
-            response_class=Response,
-            responses={
-                200: {"content": {"image/jpeg": {}}},
-                404: {"description": "Câmera não encontrada ou stream indisponível"}
-            })
-async def get_camera_thumbnail(
-    camera_id: int,
+@router.get("/{camera_id}", response_model=schemas.Camera)
+async def read_camera(  # <-- CHANGED
+    camera_id: int, 
     db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user_from_query_token) # Usa a nova dependência
+    current_user: models.User = Depends(get_current_active_user)
 ):
     """
-    Captura um único frame de uma câmera e o retorna como uma imagem JPEG.
+    Obtém detalhes de uma câmera específica.
     """
-    camera = await crud.get_camera_by_id(db, camera_id=camera_id)
-    if not camera or camera.client_id != current_user.client_id:
-        raise HTTPException(status_code=404, detail="Câmera não encontrada")
-
-    if not camera.is_active:
-        raise HTTPException(status_code=400, detail="A câmera está inativa")
-
-    # Tenta capturar o frame de forma assíncrona para não bloquear o servidor
-    def capture_frame():
-        cap = cv2.VideoCapture(camera.rtsp_url)
-        if not cap.isOpened():
-            return None, None
+    db_camera = await crud.get_camera_by_id(db, camera_id=camera_id)  # <-- CHANGED
+    if db_camera is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Security check
+    if db_camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this camera")
         
-        # Tenta ler alguns frames para garantir que a imagem não seja preta/cinza do início da conexão
-        for _ in range(5):
-            success, frame = cap.read()
-            if success:
-                break
-        
-        cap.release()
-        return success, frame
+    return db_camera
 
-    loop = asyncio.get_running_loop()
-    success, frame = await loop.run_in_executor(None, capture_frame)
-
-    if not success or frame is None:
-        raise HTTPException(status_code=404, detail="Não foi possível capturar a imagem do stream da câmera")
-
-    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-    return Response(content=buffer.tobytes(), media_type="image/jpeg")
-
-@router.patch("/{camera_id}", response_model=schemas.Camera)
-async def update_camera(
+@router.put("/{camera_id}", response_model=schemas.Camera)
+async def update_camera_with_mediamtx(  # <-- CHANGED
     camera_id: int,
-    camera_update: schemas.CameraUpdate,
+    camera: schemas.CameraUpdate,  # <-- CHANGED (use CameraUpdate schema)
     db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
     redis_client: redis.Redis = Depends(get_redis_client),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    """Atualiza uma câmera e envia comandos de start/stop se o status de ativação mudar."""
-    camera_before_update = await crud.get_camera_by_id(db, camera_id=camera_id)
-    if not camera_before_update or camera_before_update.client_id != current_user.client_id:
-        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+    """
+    Atualiza os detalhes de uma câmera e reconfigura no MediaMTX.
+    """
+    db_camera = await crud.get_camera_by_id(db, camera_id=camera_id)  # <-- CHANGED
+    if db_camera is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+        
+    # Security check
+    if db_camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this camera")
 
-    updated_camera = await crud.update_camera(
-        db=db,
-        camera_id=camera_id,
-        camera_update=camera_update,
-        client_id=current_user.client_id,
-        redis_client=redis_client
+    # Atualiza a câmera no banco
+    updated_camera = await crud.update_camera(  # <-- CHANGED
+        db=db, 
+        camera_id=camera_id, 
+        camera_update=camera,
+        client_id=current_user.client_id,  # <-- ADDED
+        redis_client=redis_client          # <-- ADDED
     )
+    
+    if updated_camera is None:
+         raise HTTPException(status_code=404, detail="Camera not found or update failed")
 
-    # Verifica se o status 'is_active' mudou
-    if camera_update.is_active is not None and camera_before_update.is_active != updated_camera.is_active:
-        if updated_camera.is_active:
-            # A câmera foi ativada
-            messaging.publish_camera_command(action="start", camera=updated_camera)
-        else:
-            # A câmera foi desativada
-            messaging.publish_camera_command(action="stop", camera=updated_camera)
-
-    # Se a URL RTSP mudou, precisamos parar o antigo e iniciar o novo
-    if camera_update.rtsp_url and camera_before_update.rtsp_url != updated_camera.rtsp_url:
-        messaging.publish_camera_command(action="stop", camera=camera_before_update)
-        messaging.publish_camera_command(action="start", camera=updated_camera)
-
+    # Reconfigura (edita) o path no MediaMTX
+    try:
+        await mediamtx_api.edit_path(
+            path_name=str(camera_id),
+            config={
+                "source": updated_camera.rtsp_url,
+                "sourceOnDemand": True
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update camera in MediaMTX: {e}")
+    
     return updated_camera
 
-@router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_camera(
+@router.delete("/{camera_id}", response_model=schemas.Camera)
+async def delete_camera_with_mediamtx(  # <-- CHANGED
     camera_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    redis_client: redis.Redis = Depends(get_redis_client), # NOVO: Adiciona o cliente Redis
+    redis_client: redis.Redis = Depends(get_redis_client),
+    current_user: models.User = Depends(get_current_active_user)
 ):
-    """Apaga uma câmera e invalida o cache de estatísticas."""
-    camera_to_delete = await crud.get_camera_by_id(db, camera_id=camera_id)
-    if not camera_to_delete or camera_to_delete.client_id != current_user.client_id:
-        raise HTTPException(status_code=404, detail="Câmera não encontrada")
+    """
+    Remove uma câmera do banco de dados e do MediaMTX.
+    """
+    # Pega a câmera para verificar a permissão
+    db_camera = await crud.get_camera_by_id(db, camera_id=camera_id)  # <-- CHANGED
+    if db_camera is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
 
-    # Envia comando para parar o processamento antes de apagar
-    messaging.publish_camera_command(action="stop", camera=camera_to_delete)
+    # Security check
+    if db_camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this camera")
 
-    await crud.delete_camera(db, camera_id=camera_id, client_id=current_user.client_id, redis_client=redis_client) # NOVO: Passa o cliente Redis e client_id
-    return None
+    # Remove do MediaMTX primeiro
+    try:
+        await mediamtx_api.remove_path(path_name=str(camera_id))
+    except Exception as e:
+        print(f"Warning: Failed to remove path from MediaMTX (maybe it was already gone?): {e}")
+
+    # Remove do banco
+    deleted_camera = await crud.delete_camera(  # <-- CHANGED
+        db=db, 
+        camera_id=camera_id,
+        client_id=current_user.client_id,  # <-- ADDED
+        redis_client=redis_client          # <-- ADDED
+    )
+    
+    if deleted_camera is None:
+        # This should not happen if the get_camera_by_id passed, but good to have
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    return deleted_camera
+
+
+@router.post("/{camera_id}/refresh_thumbnail", response_model=schemas.Camera)
+async def refresh_camera_thumbnail(  # <-- CHANGED
+    camera_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user),
+):
+    """
+    Solicita a geração de um novo thumbnail para a câmera.
+    """
+    camera = await crud.get_camera_by_id(db, camera_id=camera_id)  # <-- CHANGED
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Security check
+    if camera.client_id != current_user.client_id:
+        raise HTTPException(status_code=403, detail="Not authorized to refresh this camera")
+    
+    # Agenda a tarefa de atualização do thumbnail
+    background_tasks.add_task(generate_thumbnail_task, camera_id)
+    
+    return camera

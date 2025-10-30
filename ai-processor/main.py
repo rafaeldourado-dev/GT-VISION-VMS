@@ -214,6 +214,7 @@ def main():
         logging.info("Conexão com Redis estabelecida.")
     except redis.exceptions.ConnectionError as e:
         logging.error(f"Não foi possível conectar ao Redis: {e}. A funcionalidade de detecção de duplicatas não estará disponível.")
+        redis_client = None # Define como None para que as verificações falhem com segurança
     
     # Inicia o processamento para câmeras já ativas
     # Esta função agora só será chamada depois que o /api/ready do backend estiver OK.
